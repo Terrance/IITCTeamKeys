@@ -38,7 +38,7 @@ function wrapper() {
     // server script to sync with
     self.server = "http://terrance.uk.to/labs/teamkeys.php";
     // fetch a portal name from a cached list if available
-    function getPortalName(portal) {
+    self.getPortalName = function getPortalName(portal) {
         // try plugin cache
         if (self.cache[portal]) {
             return self.cache[portal];
@@ -54,7 +54,7 @@ function wrapper() {
         }
     }
     // fetch a user name from a cached list if available
-    function getUserName(user) {
+    self.getUserName = function getUserName(user) {
         // try plugin cache
         if (self.cache[user]) {
             return self.cache[user];
@@ -75,7 +75,7 @@ function wrapper() {
         }
     }
     // sync all keys with the server
-    self.syncKeys = function() {
+    self.syncKeys = function syncKeys() {
         // hide current key count for displayed portal
         $("#teamKeys").html("Refreshing team keys...");
         console.log("[Team Keys] Refreshing team keys...");
@@ -115,8 +115,8 @@ function wrapper() {
                         for (var x in self.keysByEntry) {
                             var entry = self.keysByEntry[x];
                             // try to cache names
-                            getPortalName(entry.portal);
-                            getUserName(entry.user);
+                            self.getPortalName(entry.portal);
+                            self.getUserName(entry.user);
                             // if no byPortal entries for portal, start list
                             if (!self.keysByPortal[entry.portal]) {
                                 self.keysByPortal[entry.portal] = [];
@@ -150,7 +150,7 @@ function wrapper() {
         });
     };
     // cache known users and portals for later displaying
-    self.syncCache = function() {
+    self.syncCache = function syncCache() {
         console.log("[Team Keys] Refreshing cache...");
         var cache = [];
         // cache users
@@ -195,10 +195,10 @@ function wrapper() {
         });
     };
     // show list of all portals with keys
-    self.showByPortal = function() {
+    self.showByPortal = function showByPortal() {
         var out = [];
         $.each(self.keysByPortal, function(portal, users) {
-        	var portalName = getPortalName(portal);
+        	var portalName = self.getPortalName(portal);
             out.push("<a onclick=\"window.plugin.teamKeys.keysForPortal('" + portal + "');\">" + portalName + "</a>");
             if (users.length > 1) {
                 out[out.length - 1] += " (" + users.length + ")";
@@ -210,7 +210,7 @@ function wrapper() {
         });
     };
     // show list of all users with keys to a single portal
-    self.keysForPortal = function(portal) {
+    self.keysForPortal = function keysForPortal(portal) {
         var keys = self.keysByPortal[portal];
         var keysByUser = {};
         /* {
@@ -225,22 +225,22 @@ function wrapper() {
         }
         var out = [];
         for (var x in keysByUser) {
-            out.push("<a onclick=\"window.chat.addNickname('@" + getUserName(x) + "');\">" + getUserName(x) + "</a>");
+            out.push("<a onclick=\"window.chat.addNickname('@" + self.getUserName(x) + "');\">" + self.getUserName(x) + "</a>");
             if (keysByUser[x] > 1) {
                 out[out.length - 1] += " (" + keysByUser[x] + ")";
             }
         }
-        var portalName = getPortalName(portal);
+        var portalName = self.getPortalName(portal);
         dialog({
             title: "Team keys: " + trunc(portalName, 20),
             html: out.join("<br/>")
         });
     };
     // show list of all users with keys
-    self.showByUser = function() {
+    self.showByUser = function showByUser() {
         var out = [];
         $.each(self.keysByUser, function(user, portals) {
-        	var userName = getUserName(user);
+        	var userName = self.getUserName(user);
             out.push("<a onclick=\"window.plugin.teamKeys.keysForUser('" + user + "');\">" + userName + "</a>");
             // show count if greater than 1
             if (portals.length > 1) {
@@ -253,7 +253,7 @@ function wrapper() {
         });
     };
     // show list of all portals with keys owned by a single user
-    self.keysForUser = function(user) {
+    self.keysForUser = function keysForUser(user) {
         var keys = self.keysByUser[user];
         var keysByPortal = {};
         /* {
@@ -268,20 +268,20 @@ function wrapper() {
         }
         var out = [];
         for (var x in keysByPortal) {
-            out.push(getPortalName(x));
+            out.push(self.getPortalName(x));
             // show count if greater than 1
             if (keysByPortal[x] > 1) {
                 out[out.length - 1] += " (" + keysByPortal[x] + ")";
             }
         }
-        var userName = getUserName(user);
+        var userName = self.getUserName(user);
         dialog({
             title: "Team keys: " + trunc(userName, 20),
             html: out.join("<br/>")
         });
     };
     // add info text under key controls
-    self.addInfo = function() {
+    self.addInfo = function addInfo() {
         $("#teamKeys").remove();
         if (self.keysByPortal[window.selectedPortal]) {
             var count = self.keysByPortal[window.selectedPortal].length;
@@ -291,9 +291,28 @@ function wrapper() {
             $("#portaldetails > .mods").before(div);
         }
     };
+    // about window for help and information
+    self.showAbout = function showAbout() {
+        var aboutDialog = dialog({
+            title: "Team keys: about",
+            html: ""
+        });
+        var oldHeight = aboutDialog.height();
+        aboutDialog.append("<strong><a href=\"http://github.com/OllieTerrance/IITCTeamKeys\">Team Keys</a></strong> ");
+        aboutDialog.append("by <a href=\"http://terrance.uk.to\">Ollie Terrance</a><br/><br/>");
+        aboutDialog.append("Having issues?  Try logging out of your team and back in again.  You can also ");
+        var link = $("<a>purge all plugin data</a>");
+        link.on("click", function(e) {
+            self.purgeConfig();
+        });
+        aboutDialog.append(link);
+        aboutDialog.append(" from the browser.  This will not affect your keys, as they are stored independently to this plugin.");
+        // re-position dialog to centre
+        aboutDialog.parent().prop("style").top = parseInt(aboutDialog.parent().prop("style").top) - ((aboutDialog.height() - oldHeight) / 2) + "px";
+    };
     // mods only: moderator window for managing team
-    self.showMod = function() {
-        if (self.config.team.role >= 1) {
+    self.showMod = function showMod() {
+        if (self.config.team.role === 1) {
             var modDialog = dialog({
                 title: "Team keys: team moderation",
                 html: "Loading team members..."
@@ -318,12 +337,12 @@ function wrapper() {
                         // fetch player names
                         var members = [];
                         $.each(data.members, function(index, item) {
-                            members.push(getUserName(item));
+                            members.push(self.getUserName(item));
                         });
                         var mods = [];
                         $.each(data.mods, function(index, item) {
                             if (item !== window.PLAYER.guid) {
-                                mods.push(getUserName(item));
+                                mods.push(self.getUserName(item));
                             }
                         });
                         var oldHeight = modDialog.height();
@@ -371,7 +390,7 @@ function wrapper() {
         }
     };
     // mods only: update the list of members in the team
-    self.setMod = function(members, mods, modDialog) {
+    self.setMod = function setMod(members, mods, modDialog) {
         var data = {
             action: "members",
             user: window.PLAYER.guid,
@@ -462,7 +481,7 @@ function wrapper() {
         });
     };
     // list of teams available to the user
-    self.selectTeam = function(teamDialog) {
+    self.selectTeam = function selectTeam(teamDialog) {
         if (teamDialog) {
             teamDialog.html("Loading available teams...");
         } else {
@@ -524,7 +543,7 @@ function wrapper() {
         });
     };
     // check permissions on a team, and join it
-    self.checkTeam = function(team, teamDialog) {
+    self.checkTeam = function checkTeam(team, teamDialog) {
         // recycle dialog
         if (teamDialog) {
             teamDialog.html("Checking permissions...");
@@ -590,7 +609,7 @@ function wrapper() {
         });
     };
     // lost permissions whilst logged in
-    self.authFail = function(authDialog) {
+    self.authFail = function authFail(authDialog) {
         // recycle dialog
         if (authDialog) {
             authDialog.html("Your team membership doesn't seem to be valid.  Click OK to refresh and login again.");
@@ -612,17 +631,32 @@ function wrapper() {
         $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", authDialog.parent()).append(okButton);
     };
     // save user options to local storage
-    self.saveConfig = function() {
+    self.saveConfig = function saveConfig() {
         window.localStorage["plugin-teamKeys-config"] = JSON.stringify(self.config);
     };
+    // remove any local storage data for the plugin and reload
+    self.purgeConfig = function saveConfig() {
+        var toDelete = [];
+        // don't modify original array whilst in loop, just make a note of keys
+        for (var x in window.localStorage) {
+            if (x.indexOf("plugin-teamKeys-") === 0) {
+                toDelete.push(x);
+            }
+        }
+        // remove all found keys
+        for (var x in toDelete) {
+            delete window.localStorage[toDelete[x]];
+        }
+        window.location.reload();
+    };
     // clear team key and refresh
-    self.logout = function() {
+    self.logout = function logout() {
         self.config.team = null;
         self.saveConfig();
         window.location.reload();
     };
     // initial setup hook
-    self.setup = function() {
+    self.setup = function setup() {
         // fake local storage if not provided by browser
         if (!window.localStorage) {
             window.localStorage = {};
@@ -656,7 +690,7 @@ function wrapper() {
         delete self.setup;
     };
     // initialize events and toolbox
-    self.init = function() {
+    self.init = function init() {
         // resync when the map moves, or when key numbers change
         $.each(["mapDataRefreshEnd", "pluginKeysUpdateKey", "pluginKeysRefreshAll"], function(index, item) {
             window.addHook(item, function() {
@@ -672,13 +706,14 @@ function wrapper() {
         self.syncKeys();
         self.syncCache();
         // add controls to toolbox
-        var block = $("<a style='text-decoration: none;'>Team keys: </a>");
+        var block = $("<a style='text-decoration: none;'></a>");
         var links = [];
+        links.push("<a onclick=\"window.plugin.teamKeys.showAbout();\" title=\"Display the about window.\">Team Keys</a>");
         links.push("<a onclick=\"window.plugin.teamKeys.showByPortal();\" title=\"Display a list of portals, and all known keys held by team members.\">portals</a>");
         links.push("<a onclick=\"window.plugin.teamKeys.showByUser();\" title=\"Display a list of team members, and all their keys.\">users</a>");
         // show moderator link
         if (self.config.team.role === 1) {
-            links.push("<a onclick=\"window.plugin.teamKeys.showMod();\" title=\"Display the moderator window to manage users in the team.\">mod</a>");
+            links.push("<a onclick=\"window.plugin.teamKeys.showMod();\" title=\"Display the moderation window, to manage members of the team.\">mod</a>");
         }
         links.push("<a onclick=\"window.plugin.teamKeys.logout();\" title=\"Logout from your current team, in case you want to switch to another.\">logout</a>");
         block.append(links.join(" | "));
