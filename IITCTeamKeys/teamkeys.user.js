@@ -2,7 +2,7 @@
 // @id             iitc-plugin-team-keys@OllieTerrance
 // @name           IITC plugin: Team Keys
 // @category       Keys
-// @version        0.0.1.0
+// @version        0.0.1.1
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @description    Allows teams to collaborate with keys, showing all keys owned by each member of the team.
 // @include        https://www.ingress.com/intel*
@@ -31,24 +31,45 @@ function wrapper() {
     // fetch a portal name from a cached list if available
     function getPortalName(portal) {
         // try plugin cache
-        if (window.plugin.teamKeys.portalCache[portal]) {
-            return window.plugin.teamKeys.portalCache[portal];
+        if (window.plugin.teamKeys.cache[portal]) {
+            return window.plugin.teamKeys.cache[portal];
         // if currently on-screen
         } else if (window.portals[portal]) {
             var name = window.portals[portal].options.details.portalV2.descriptiveText.TITLE;
             // cache for later
-            window.plugin.teamKeys.portalCache[portal] = name;
-            window.localStorage["plugin-teamKeys-portalCache"] = JSON.stringify(window.plugin.teamKeys.portalCache);
+            window.plugin.teamKeys.cache[portal] = name;
+            window.localStorage["plugin-teamKeys-cache"] = JSON.stringify(window.plugin.teamKeys.cache);
             return name;
         // portal name not available
         } else {
             return "{" + portal + "}";
         }
     }
+    // fetch a user name from a cached list if available
+    function getUserName(user) {
+        // try plugin cache
+        if (window.plugin.teamKeys.cache[user]) {
+            return window.plugin.teamKeys.cache[user];
+        // if cached by IITC
+        } else if (window.getPlayerName(user) !== "{" + user + "}" && window.getPlayerName(user) !== "unknown") {
+            var name = window.getPlayerName(user);
+            // cache for later
+            window.plugin.teamKeys.cache[user] = name;
+        // if in local storage
+        } else if (window.localStorage[user]) {
+            var name = window.localStorage[user];
+            // cache for later
+            window.plugin.teamKeys.cache[portal] = name;
+            return name;
+        // user name not available
+        } else {
+            return "{" + user + "}";
+        }
+    }
     // base context for plugin
     window.plugin.teamKeys = function() {};
-    // empty cache to hold portal names
-    window.plugin.teamKeys.portalCache = {};
+    // empty cache to hold portal and user names
+    window.plugin.teamKeys.cache = {};
     // server script to sync with
     window.plugin.teamKeys.server = "http://terrance.uk.to/labs/teamkeys.php";
     // current user's team
@@ -95,7 +116,7 @@ function wrapper() {
                             var entry = window.plugin.teamKeys.keysByEntry[x];
                             // try to cache names
                             getPortalName(entry.portal);
-                            window.getPlayerName(entry.user);
+                            getUserName(entry.user);
                             // if no byPortal entries for portal, start list
                             if (!window.plugin.teamKeys.keysByPortal[entry.portal]) {
                                 window.plugin.teamKeys.keysByPortal[entry.portal] = [];
@@ -125,6 +146,51 @@ function wrapper() {
                 setTimeout(function() {
                     window.plugin.teamKeys.sync();
                 }, 3000);
+            }
+        });
+    };
+    // cache known users and portals for later displaying
+    window.plugin.teamKeys.syncCache = function() {
+        console.log("[Team Keys] Refreshing cache...");
+        var cache = [];
+        // cache users
+        for (var x in window.localStorage) {
+            if (x.match(/^[0-9a-f]{32}\.c$/) && !window.plugin.teamKeys.cache[x]) {
+                window.plugin.teamKeys.cache[x] = window.localStorage[x];
+            }
+        }
+        // convert cache for sending (POSTing as an object throws header errors)
+        for (var x in window.plugin.teamKeys.cache) {
+            cache.push(x + "|" + window.plugin.teamKeys.cache[x]);
+        }
+        /* {
+            guid: string,
+            ...
+        } */
+        $.ajax({
+            url: window.plugin.teamKeys.server,
+            method: "POST",
+            data: {
+                action: "cache",
+                cache: cache.join("\n")
+            },
+            success: function(resp, status, obj) {
+                console.log("[Team Keys] Response received.");
+                var data = JSON.parse(resp);
+                // replace cache
+                if (data.count) {
+                    window.plugin.teamKeys.cache = data.cache;
+                    window.localStorage["plugin-teamKeys-cache"] = JSON.stringify(data.cache);
+                    setTimeout(function() {
+                        window.plugin.teamKeys.syncCache();
+                    }, 60000);
+                }
+            },
+            error: function(obj, status, err) {
+                console.warn("[Team Keys] Failed to sync cache: " + status);
+                setTimeout(function() {
+                    window.plugin.teamKeys.syncCache();
+                }, 5000);
             }
         });
     };
@@ -159,7 +225,7 @@ function wrapper() {
         }
         var out = [];
         for (var x in keysByUser) {
-            out.push("<a onclick=\"window.chat.addNickname('@" + getPlayerName(x) + "');\">" + getPlayerName(x) + "</a>");
+            out.push("<a onclick=\"window.chat.addNickname('@" + getUserName(x) + "');\">" + getUserName(x) + "</a>");
             if (keysByUser[x] > 1) {
                 out[out.length - 1] += " (" + keysByUser[x] + ")";
             }
@@ -174,7 +240,7 @@ function wrapper() {
     window.plugin.teamKeys.showByUser = function() {
         var out = [];
         $.each(window.plugin.teamKeys.keysByUser, function(user, portals) {
-        	var userName = window.getPlayerName(user);
+        	var userName = getUserName(user);
             out.push("<a onclick=\"window.plugin.teamKeys.keysForUser('" + user + "');\">" + userName + "</a>");
             // show count if greater than 1
             if (portals.length > 1) {
@@ -208,7 +274,7 @@ function wrapper() {
                 out[out.length - 1] += " (" + keysByPortal[x] + ")";
             }
         }
-        var userName = window.getPlayerName(user);
+        var userName = getUserName(user);
         dialog({
             title: "Team keys: " + trunc(userName, 20),
             html: out.join("<br/>")
@@ -252,12 +318,12 @@ function wrapper() {
                         // fetch player names
                         var members = [];
                         $.each(data.members, function(index, item) {
-                            members.push(getPlayerName(item));
+                            members.push(getUserName(item));
                         });
                         var mods = [];
                         $.each(data.mods, function(index, item) {
                             if (item !== window.PLAYER.guid) {
-                                mods.push(getPlayerName(item));
+                                mods.push(getUserName(item));
                             }
                         });
                         var oldHeight = modDialog.height();
@@ -559,14 +625,14 @@ function wrapper() {
         // if logged in to a team
         if (window.plugin.teamKeys.team) {
             // if an existing portal cache, load it
-            if (window.localStorage["plugin-teamKeys-portalCache"]) {
-                window.plugin.teamKeys.portalCache = JSON.parse(window.localStorage["plugin-teamKeys-portalCache"]);
+            if (window.localStorage["plugin-teamKeys-cache"]) {
+                window.plugin.teamKeys.cache = JSON.parse(window.localStorage["plugin-teamKeys-cache"]);
             // make a new cache
             } else {
-                window.localStorage["plugin-teamKeys-portalCache"] = "{}";
+                window.localStorage["plugin-teamKeys-cache"] = "{}";
             }
-            // resync on start, when the map moves, or when key numbers change
-            $.each(["iitcLoaded", "mapDataRefreshEnd", "pluginKeysUpdateKey", "pluginKeysRefreshAll"], function(index, item) {
+            // resync when the map moves, or when key numbers change
+            $.each(["mapDataRefreshEnd", "pluginKeysUpdateKey", "pluginKeysRefreshAll"], function(index, item) {
                 window.addHook(item, function() {
                     window.plugin.teamKeys.sync();
                 });
@@ -576,6 +642,9 @@ function wrapper() {
                 window.plugin.teamKeys.addInfo();
                 window.plugin.teamKeys.sync();
             });
+            // start syncing keys and cache
+            window.plugin.teamKeys.sync();
+            window.plugin.teamKeys.syncCache();
             // add controls to toolbox
             var block = $("<a style='text-decoration: none;'>Team keys: </a>");
             var links = [];
