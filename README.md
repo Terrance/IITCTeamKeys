@@ -37,7 +37,7 @@ Running Your Own
 
 Upload the **teamkeys.php** file to your server, and update the value of `window.plugin.teamKeys.server` in **teamkeys.user.js**.
 
-The database for this plugin has two tables:
+The database for this plugin has three tables:
 
 ```sql
 CREATE TABLE `teamkeys_keys` (
@@ -56,4 +56,10 @@ CREATE TABLE `teamkeys_teams` (
   `role` int(11) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=MyISAM  DEFAULT CHARSET=latin1 AUTO_INCREMENT=1 ;
+
+CREATE TABLE `teamkeys_cache` (
+  `key` varchar(36) NOT NULL,
+  `value` varchar(100) NOT NULL,
+  PRIMARY KEY (`key`)
+) ENGINE=MyISAM DEFAULT CHARSET=latin1;
 ```
