@@ -2,7 +2,7 @@
 // @id             iitc-plugin-team-keys@OllieTerrance
 // @name           IITC plugin: Team Keys
 // @category       Keys
-// @version        0.0.1.3
+// @version        0.0.1.4
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @description    Allows teams to collaborate with keys, showing all keys owned by each member of the team.
 // @include        https://www.ingress.com/intel*
@@ -74,6 +74,106 @@ function wrapper() {
             return "{" + user + "}";
         }
     }
+    // custom dialog wrapper with more flexibility
+    self.dialog = function dialog(options) {
+        // create missing fields
+        if (!options) {
+            options = {};
+        }
+        if (!options.callbacks) {
+            options.callbacks = {};
+        }
+        var obj = {
+            // dialog function returns $-wrapped content, so call parent on it, hide by default, and unwrap
+            dialog: window.dialog({
+                title: options.title,
+                // body must be wrapped in an outer tag (e.g. <div>content</div>)
+                html: $(options.body).html()
+            }).parent().css("display", "none").get(0),
+            // cache callbacks for later
+            callbacks: options.callbacks,
+            // set to true if moved from default position
+            moved: false,
+            // reposition the dialog to the centre of the screen
+            centre: function centre(force) {
+                if (!this.moved || force) {
+                	$(this.dialog).css("top", ($(window).height() - $(this.dialog).height()) / 2);
+                	$(this.dialog).css("left", ($(window).width() - $(this.dialog).width()) / 2);
+                }
+            },
+            // replace the title of the dialog
+            setTitle: function setTitle(title) {
+                $(".ui-dialog-title", this.dialog).html(title);
+            },
+            // replace the body of the dialog
+            setBody: function setBody(body) {
+                $(".ui-dialog-content", this.dialog).html($(body).html());
+            },
+            // replace the bottom controls
+            setControls: function setControls(controls) {
+                /* controls = [
+                    {text, callback},
+                    ...
+                ] */
+                // remove existing buttons
+                $(".ui-dialog-buttonset", this.dialog).html("");
+                // add new buttons
+                $.each(controls, function(index, item) {
+                    var button = $("<button type='button' role='button' aria-disabled='false'>").addClass("ui-button ui-widget ui-state-default ui-corner-all ui-button-text-only");
+                    button.append("<span class='ui-button-text'>" + item.text + "</span>");
+                    button.on("click", item.callback);
+                    $(".ui-dialog-buttonset", this.dialog).append(button);
+                });
+            },
+            // show or hide the bottom controls
+            showControls: function showControls(show) {
+                $(".ui-dialog-buttonpane", this.dialog).css("display", show ? "block" : "none");
+            },
+            // show or hide the whole dialog, default to toggling
+            show: function show(show) {
+                if (typeof show === "undefined") {
+                    $(this.dialog).css("display", $(this.dialog).css("display") === "none" ? "block" : "none");
+                } else {
+                	$(this.dialog).css("display", show ? "block" : "none");
+                }
+            },
+            // close the dialog
+            close: function close(noCallback) {
+                $(this.dialog).dialog().dialog("close");
+                // run callback if defined and not suppressed
+                if (!noCallback && this.callbacks.close) {
+                    this.callbacks.close();
+                }
+            }
+        };
+        // add callback to ok button
+        if (obj.callbacks.ok) {
+            $(".ui-dialog-buttonset button", obj.dialog).on("click", function(e) {
+                obj.callbacks.ok();
+            });
+        }
+        // add callback to close button
+        if (obj.callbacks.close) {
+            $(".ui-dialog-titlebar-button-close", obj.dialog).on("click", function(e) {
+                obj.callbacks.close();
+            });
+        }
+        // mark dialog as moved when dragging titlebar
+        $(".ui-dialog-titlebar", obj.dialog).on("mousedown", function(e) {
+            var pos = [e.pageX, e.pageY];
+            $(".ui-dialog-titlebar", obj.dialog).on("mouseup", function(e) {
+                // moved whilst the mouse was down
+                if (pos[0] !== e.pageX || pos[1] !== e.pageY) {
+                    obj.moved = true;
+                    // stop monitoring now
+                    $(".ui-dialog-titlebar", obj.dialog).off("mousedown");
+                    $(".ui-dialog-titlebar", obj.dialog).off("mouseup");
+                }
+            });
+        });
+        // return the dialog
+        return obj;
+    };
     // sync all keys with the server
     self.syncKeys = function syncKeys() {
         // hide current key count for displayed portal
