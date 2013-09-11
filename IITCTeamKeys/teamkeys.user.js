@@ -2,7 +2,7 @@
 // @id             iitc-plugin-team-keys@OllieTerrance
 // @name           IITC plugin: Team Keys
 // @category       Keys
-// @version        0.0.1.4
+// @version        0.0.1.5
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @description    Allows teams to collaborate with keys, showing all keys owned by each member of the team.
 // @include        https://www.ingress.com/intel*
@@ -88,7 +88,7 @@ function wrapper() {
             dialog: window.dialog({
                 title: options.title,
                 // body must be wrapped in an outer tag (e.g. <div>content</div>)
-                html: $(options.body).html()
+                html: $(options.body).children()
             }).parent().css("display", "none").get(0),
             // cache callbacks for later
             callbacks: options.callbacks,
@@ -100,14 +100,17 @@ function wrapper() {
                 	$(this.dialog).css("top", ($(window).height() - $(this.dialog).height()) / 2);
                 	$(this.dialog).css("left", ($(window).width() - $(this.dialog).width()) / 2);
                 }
+                return this;
             },
             // replace the title of the dialog
             setTitle: function setTitle(title) {
                 $(".ui-dialog-title", this.dialog).html(title);
+                return this;
             },
             // replace the body of the dialog
             setBody: function setBody(body) {
-                $(".ui-dialog-content", this.dialog).html($(body).html());
+                $(".ui-dialog-content", this.dialog).html($(body).children());
+                return this;
             },
             // replace the bottom controls
             setControls: function setControls(controls) {
@@ -124,10 +127,22 @@ function wrapper() {
                     button.on("click", item.callback);
                     $(".ui-dialog-buttonset", this.dialog).append(button);
                 });
+                return this;
             },
             // show or hide the bottom controls
             showControls: function showControls(show) {
-                $(".ui-dialog-buttonpane", this.dialog).css("display", show ? "block" : "none");
+                var showing = $(".ui-dialog-buttonpane", this.dialog).css("visibility") === "visible";
+                if (typeof show === "undefined") {
+                    $(".ui-dialog-buttonpane", this.dialog).css("visibility", showing ? "hidden" : "visible")
+                                                           .css("padding", showing ? "0" : "6px").css("height", showing ? "0" : "auto");
+                } else if (show !== showing) {
+                    $(".ui-dialog-buttonpane", this.dialog).css("visibility", show ? "visible" : "hidden")
+                                                           .css("padding", show ? "6px" : "0").css("height", show ? "auto" : "0");
+                } else {
+                    // no change, return now
+                    return this;
+                }
+                return this;
             },
             // show or hide the whole dialog, default to toggling
             show: function show(show) {
@@ -136,6 +151,21 @@ function wrapper() {
                 } else {
                 	$(this.dialog).css("display", show ? "block" : "none");
                 }
+                return this;
+            },
+            // refresh the data in the dialog if a method is provided
+            refresh: function refresh() {
+                if (this.callbacks.refresh) {
+                    var props = this.callbacks.refresh();
+                    if (props.title) {
+                        this.setTitle(props.title);
+                    }
+                    if (props.body) {
+                        this.setBody(props.body);
+                        this.centre();
+                    }
+                }
+                return this;
             },
             // close the dialog
             close: function close(noCallback) {
@@ -144,6 +174,7 @@ function wrapper() {
                 if (!noCallback && this.callbacks.close) {
                     this.callbacks.close();
                 }
+                return this;
             }
         };
         // add callback to ok button
@@ -296,89 +327,125 @@ function wrapper() {
     };
     // show list of all portals with keys
     self.showByPortal = function showByPortal() {
-        var out = [];
-        $.each(self.keysByPortal, function(portal, users) {
-        	var portalName = self.getPortalName(portal);
-            out.push("<a onclick=\"window.plugin.teamKeys.keysForPortal('" + portal + "');\">" + portalName + "</a>");
-            if (users.length > 1) {
-                out[out.length - 1] += " (" + users.length + ")";
+        self.dialog({
+            title: "Team Keys: all portals",
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    $.each(self.keysByPortal, function(portal, users) {
+                        var portalName = self.getPortalName(portal);
+                        var link = $("<a>" + portalName + "</a>");
+                        link.on("click", function(e) {
+                            self.keysForPortal(portal);
+                        });
+                        props.body.append(link);
+                        if (users.length > 1) {
+                            props.body.append("<span> (" + users.length + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    });
+                    return props;
+                }
             }
-        });
-        dialog({
-            title: "Team keys: all portals",
-            html: out.join("<br/>")
-        });
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all users with keys to a single portal
     self.keysForPortal = function keysForPortal(portal) {
-        var keys = self.keysByPortal[portal];
-        var keysByUser = {};
-        /* {
-            user: count,
-            ...
-        } */
-        for (var x in keys) {
-            if (!keysByUser[keys[x]]) {
-                keysByUser[keys[x]] = 0;
+        self.dialog({
+            title: "Team Keys:" + trunc(self.getPortalName(portal), 20),
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    var keys = self.keysByPortal[portal];
+                    var keysByUser = {};
+                    /* {
+                        user: count,
+                        ...
+                    } */
+                    for (var x in keys) {
+                        if (!keysByUser[keys[x]]) {
+                            keysByUser[keys[x]] = 0;
+                        }
+                        keysByUser[keys[x]]++;
+                    }
+                    for (var x in keysByUser) {
+                        var link = $("<a>" + self.getUserName(x) + "</a>");
+                        link.on("click", function(e) {
+                            window.chat.addNickname("@" + self.getUserName(x));
+                        });
+                        props.body.append(link);
+                        if (keysByUser[x] > 1) {
+                            props.body.append("<span> (" + keysByUser[x] + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    }
+                    return props;
+                }
             }
-            keysByUser[keys[x]]++;
-        }
-        var out = [];
-        for (var x in keysByUser) {
-            out.push("<a onclick=\"window.chat.addNickname('@" + self.getUserName(x) + "');\">" + self.getUserName(x) + "</a>");
-            if (keysByUser[x] > 1) {
-                out[out.length - 1] += " (" + keysByUser[x] + ")";
-            }
-        }
-        var portalName = self.getPortalName(portal);
-        dialog({
-            title: "Team keys: " + trunc(portalName, 20),
-            html: out.join("<br/>")
-        });
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all users with keys
     self.showByUser = function showByUser() {
-        var out = [];
-        $.each(self.keysByUser, function(user, portals) {
-        	var userName = self.getUserName(user);
-            out.push("<a onclick=\"window.plugin.teamKeys.keysForUser('" + user + "');\">" + userName + "</a>");
-            // show count if greater than 1
-            if (portals.length > 1) {
-                out[out.length - 1] += " (" + portals.length + ")";
+        self.dialog({
+            title: "Team Keys: all members",
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    $.each(self.keysByUser, function(user, portals) {
+                        var userName = self.getUserName(user);
+                        var link = $("<a>" + userName + "</a>");
+                        link.on("click", function(e) {
+                            self.keysForUser(user);
+                        });
+                        props.body.append(link);
+                        if (portals.length > 1) {
+                            props.body.append("<span> (" + portals.length + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    });
+                    return props;
+                }
             }
-        });
-        dialog({
-            title: "Team keys: all members",
-            html: out.join("<br/>")
-        });
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all portals with keys owned by a single user
     self.keysForUser = function keysForUser(user) {
-        var keys = self.keysByUser[user];
-        var keysByPortal = {};
-        /* {
-            portal: count,
-            ...
-        } */
-        for (var x in keys) {
-            if (!keysByPortal[keys[x]]) {
-                keysByPortal[keys[x]] = 0;
+        self.dialog({
+            title: "Team Keys:" + trunc(self.getUserName(user), 20),
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    var keys = self.keysByUser[user];
+                    var keysByPortal = {};
+                    /* {
+                        portal: count,
+                        ...
+                    } */
+                    for (var x in keys) {
+                        if (!keysByPortal[keys[x]]) {
+                            keysByPortal[keys[x]] = 0;
+                        }
+                        keysByPortal[keys[x]]++;
+                    }
+                    for (var x in keysByPortal) {
+                        props.body.append("<span>" + self.getPortalName(x) + "</span>");
+                        if (keysByPortal[x] > 1) {
+                            props.body.append("<span> (" + keysByPortal[x] + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    }
+                    return props;
+                }
             }
-            keysByPortal[keys[x]]++;
-        }
-        var out = [];
-        for (var x in keysByPortal) {
-            out.push(self.getPortalName(x));
-            // show count if greater than 1
-            if (keysByPortal[x] > 1) {
-                out[out.length - 1] += " (" + keysByPortal[x] + ")";
-            }
-        }
-        var userName = self.getUserName(user);
-        dialog({
-            title: "Team keys: " + trunc(userName, 20),
-            html: out.join("<br/>")
-        });
+        }).setControls([]).showControls().refresh().show();
     };
     // add info text under key controls
     self.addInfo = function addInfo() {
@@ -393,28 +460,26 @@ function wrapper() {
     };
     // about window for help and information
     self.showAbout = function showAbout() {
-        var aboutDialog = dialog({
-            title: "Team keys: about",
-            html: ""
-        });
-        var oldHeight = aboutDialog.height();
-        aboutDialog.append("<strong><a href=\"http://github.com/OllieTerrance/IITCTeamKeys\">Team Keys</a></strong> ");
-        aboutDialog.append("by <a href=\"http://terrance.uk.to\">Ollie Terrance</a><br/><br/>");
-        aboutDialog.append("Having issues?  Try logging out of your team and back in again.  You can also ");
+        var body = $("<div/>");
+        body.append("<strong><a href=\"http://github.com/OllieTerrance/IITCTeamKeys\">Team Keys</a></strong>");
+        body.append("<span> by </span><a href=\"http://terrance.uk.to\">Ollie Terrance</a><br/><br/>");
+        body.append("<span>Having issues?  Try logging out of your team and back in again.  You can also </span>");
         var link = $("<a>purge all plugin data</a>");
         link.on("click", function(e) {
             self.purgeConfig();
         });
-        aboutDialog.append(link);
-        aboutDialog.append(" from the browser.  This will not affect your keys, as they are stored independently to this plugin.");
-        // re-position dialog to centre
-        aboutDialog.parent().prop("style").top = parseInt(aboutDialog.parent().prop("style").top) - ((aboutDialog.height() - oldHeight) / 2) + "px";
+        body.append(link);
+        body.append("<span> from the browser.  This will not affect your keys, as they are stored independently to this plugin.</span>");
+        self.dialog({
+            title: "Team Keys: about",
+            body: body
+        }).show();
     };
     // mods only: moderator window for managing team
     self.showMod = function showMod() {
         if (self.config.team.role === 1) {
             var modDialog = dialog({
-                title: "Team keys: team moderation",
+                title: "Team Keys: team moderation",
                 html: "Loading team members..."
             });
             // hide OK button
@@ -586,7 +651,7 @@ function wrapper() {
             teamDialog.html("Loading available teams...");
         } else {
             teamDialog = dialog({
-                title: "Team keys: select team",
+                title: "Team Keys: select team",
                 html: "Loading available teams..."
             });
         }
@@ -717,7 +782,7 @@ function wrapper() {
             dialogButtons.prop("style").display = "block";
         } else {
             authDialog = dialog({
-                title: "Team keys: authentication",
+                title: "Team Keys: authentication",
                 html: "Your team membership doesn't seem to be valid.  Click OK to refresh and login again."
             });
         }
