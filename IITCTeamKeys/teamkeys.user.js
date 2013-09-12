@@ -2,7 +2,7 @@
 // @id             iitc-plugin-team-keys@OllieTerrance
 // @name           IITC plugin: Team Keys
 // @category       Keys
-// @version        0.0.1.5
+// @version        0.0.1.6
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @description    Allows teams to collaborate with keys, showing all keys owned by each member of the team.
 // @include        https://www.ingress.com/intel*
@@ -289,6 +289,8 @@ function wrapper() {
                     }
                     // re-show info on selected portal
                     self.addInfo();
+                    // update all windows
+                    self.refreshAllDialogs();
                 } else {
                     self.authFail();
                 }
@@ -337,6 +339,8 @@ function wrapper() {
                         self.syncCache();
                     }, 60000);
                 }
+                // update all windows
+                self.refreshAllDialogs();
             },
             error: function(obj, status, err) {
                 console.warn("[Team Keys] Failed to sync cache: " + status);
@@ -344,6 +348,21 @@ function wrapper() {
                     self.syncCache();
                 }, 5000);
             }
+        });
+    };
+    // update all data-displaying dialogs
+    self.refreshAllDialogs = function refreshAllDialogs() {
+        // refresh single dialogs
+        $.each([self.dialogs.showByPortal, self.dialogs.showByUser], function(index, item) {
+            if (item) {
+                item.refresh();
+            }
+        });
+        // refresh all children
+        $.each([self.dialogs.keysForPortal, self.dialogs.keysForPortal], function(index, item) {
+            $.each(item, function(subIndex, subItem) {
+                subItem.refresh();
+            });
         });
     };
     // show list of all portals with keys
@@ -603,14 +622,15 @@ function wrapper() {
                                     body.append(link);
                                     body.append("<span>)</span><br/>");
                                     body.append(modsField);
+                                    // update window
                                     self.dialogs.mod.setBody(body).setControls([{
                                         text: "OK",
                                         callback: function(e) {
-                                            self.setMod(membersField.val(), modsField.val(), modDialog);
+                                            self.setMod(membersField.val(), modsField.val());
                                         }
                                     }]).showControls().centre();
                                 } else {
-                                    self.authFail(modDialog);
+                                    self.authFail(self.dialogs.mod);
                                 }
                             },
                             error: function(obj, status, err) {
@@ -633,7 +653,7 @@ function wrapper() {
         }
     };
     // mods only: update the list of members in the team
-    self.setMod = function setMod(members, mods, modDialog) {
+    self.setMod = function setMod(members, mods) {
         var data = {
             action: "members",
             user: window.PLAYER.guid,
@@ -658,7 +678,7 @@ function wrapper() {
                     }
                 // username not cached
                 } else {
-                    noLookup.push(item);
+                    noLookup.push("<span>" + item + "</span>");
                 }
             }
         });
@@ -676,15 +696,11 @@ function wrapper() {
                     }
                 // username not cached
                 } else {
-                    noLookup.push(item);
+                    noLookup.push("<span>" + item + "</span>");
                 }
             }
         });
-        var oldHeight = modDialog.height();
-        var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", modDialog.parent());
-        dialogButtons.prop("style").display = "none";
-        modDialog.html("Updating members...");
-        modDialog.parent().prop("style").top = parseInt(modDialog.parent().prop("style").top) - ((modDialog.height() - oldHeight) / 2) + "px";
+        self.dialogs.mod.setBody("<div><span>Updating members...</span></div>").noControls().centre();
         console.log("[Team Keys] Updating team members...");
         $.ajax({
             url: self.server,
@@ -694,31 +710,29 @@ function wrapper() {
                 console.log("[Team Keys] Response received.");
                 var data = JSON.parse(resp);
                 if (data.auth) {
-                    modDialog.html("Team members have been saved.");
+                    var body = $("<div/>");
+                    body.append("<span>Team members have been saved.</span>");
                     // list non-cached usernames
                     if (noLookup.length) {
-                        modDialog.append("<br/><br/>However, the following usernames did not resolve.  This happens if the user has not visited recently, and has no activity on the map.<br/><br/>");
-                        modDialog.append(noLookup.join("<br/>"));
+                        body.append("<br/><br/><span>However, the following usernames did not resolve.  This happens if the user has not visited recently, and has no activity on the map.</span><br/><br/>");
+                        body.append(noLookup.join("<br/>"));
                     }
-                    // restore default OK button
-                    var oldButton = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix button", modDialog.parent());
-                    var okButton = oldButton.clone();
-                    oldButton.remove();
-                    okButton.on("click", function(e) {
-                        modDialog.parent().dialog().dialog("close");
-                    });
-                    // re-position dialog to centre
-                    $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", modDialog.parent()).append(okButton);
-                    dialogButtons.prop("style").display = "block";
+                    // update window
+                    self.dialogs.mod.setBody(body).setControls([{
+                        text: "OK",
+                        callback: function(e) {
+                            self.dialogs.mod.close();
+                        }
+                    }]).showControls().centre();
                 } else {
-                    self.authFail(modDialog);
+                    self.authFail(self.dialogs.mod);
                 }
             },
             error: function(obj, status, err) {
                 console.warn("[Team Keys] Failed to set mods: " + status);
-                modDialog.html("Failed to update team members.  Retrying in 3 seconds...");
+                self.dialogs.mod.setBody("<div><span>Failed to update team members.  Retrying in 3 seconds...</span></div>");
                 setTimeout(function() {
-                    self.setMod(members, mods, modDialog);
+                    self.setMod(members, mods);
                 }, 3000);
             }
         });
