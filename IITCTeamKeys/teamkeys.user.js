@@ -144,6 +144,10 @@ function wrapper() {
                 }
                 return this;
             },
+            // shorthand to remove controls
+            noControls: function noControls() {
+                return this.setControls([]).showControls(false);
+            },
             // show or hide the whole dialog, default to toggling
             show: function show(show) {
                 if (typeof show === "undefined") {
@@ -151,6 +155,14 @@ function wrapper() {
                 } else {
                 	$(this.dialog).css("display", show ? "block" : "none");
                 }
+                return this;
+            },
+            // bring this window to the front
+            focus: function focus() {
+                $(this.dialog).detach();
+                $(".ui-dialog").after($(this.dialog));
+                $(".ui-dialog-title").removeClass("ui-dialog-title-active").addClass("ui-dialog-title-inactive");
+                $(".ui-dialog-title", this.dialog).removeClass("ui-dialog-title-inactive").addClass("ui-dialog-title-active");
                 return this;
             },
             // refresh the data in the dialog if a method is provided
