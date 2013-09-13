@@ -42,7 +42,8 @@ function wrapper() {
         showByUser: null,
         keysForUser: {},
         about: null,
-        mod: null
+        mod: null,
+        team: null
     };
     // server script to sync with
     self.server = "http://terrance.uk.to/labs/teamkeys.php";
@@ -635,6 +636,7 @@ function wrapper() {
                             },
                             error: function(obj, status, err) {
                                 console.warn("[Team Keys] Failed to get team: " + status);
+                                self.dialogs.mod.setBody("<div><span>Failed to fetch a list of members.  Retrying in 3 seconds...</span></div>");
                                 setTimeout(function() {
                                     self.dialogs.mod.refresh();
                                 }, 5000);
@@ -738,73 +740,87 @@ function wrapper() {
         });
     };
     // list of teams available to the user
-    self.selectTeam = function selectTeam(teamDialog) {
-        if (teamDialog) {
-            teamDialog.html("Loading available teams...");
+    self.selectTeam = function selectTeam() {
+        if (self.dialogs.team) {
+            self.dialogs.team.noControls().refresh().focus();
         } else {
-            teamDialog = dialog({
+            self.dialogs.team = self.dialog({
                 title: "Team Keys: select team",
-                html: "Loading available teams..."
-            });
-        }
-        // hide OK button
-        var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", teamDialog.parent());
-        dialogButtons.prop("style").display = "none";
-        console.log("[Team Keys] Refreshing available teams...");
-        $.ajax({
-            url: self.server,
-            method: "POST",
-            data: {
-                action: "teams",
-                user: window.PLAYER.guid
-            },
-            success: function(resp, status, obj) {
-                console.log("[Team Keys] Response received.");
-                var data = JSON.parse(resp);
-                // teams available
-                if (data.count) {
-                    teamDialog.html("You are a member of " + data.count + " team" + (data.count > 1 ? "s" : "") + " (");
-                    var link = $("<a>refresh</a>");
-                    link.on("click", function(e) {
-                        self.selectTeam(teamDialog);
-                    });
-                    teamDialog.append(link);
-                    teamDialog.append(").  Select one below to start collaborating keys.<br/><br/>");
-                    $.each(data.teams, function(index, item) {
-                        var link = $("<a>" + item.team + " (" + ["member", "moderator"][item.role] + ")</a>");
-                        link.on("click", function(e) {
-                            self.checkTeam(item, teamDialog);
+                html: "<div><span>Loading available teams...</span></div>",
+                callbacks: {
+                    refresh: function() {
+                        console.log("[Team Keys] Refreshing available teams...");
+                        $.ajax({
+                            url: self.server,
+                            method: "POST",
+                            data: {
+                                action: "teams",
+                                user: window.PLAYER.guid
+                            },
+                            success: function(resp, status, obj) {
+                                console.log("[Team Keys] Response received.");
+                                var data = JSON.parse(resp);
+                                var body = $("<div/>");
+                                // teams available
+                                if (data.count) {
+                                    body.append("<span>You are a member of " + data.count + " team" + (data.count > 1 ? "s" : "") + " (</span>");
+                                    var link = $("<a>refresh</a>");
+                                    link.on("click", function(e) {
+                                        self.selectTeam();
+                                    });
+                                    body.append(link);
+                                    body.append("<span>).  Select one below to start collaborating keys.</span><br/><br/>");
+                                    $.each(data.teams, function(index, item) {
+                                        var link = $("<a>" + item.team + " (" + ["member", "moderator"][item.role] + ")</a>");
+                                        link.on("click", function(e) {
+                                            self.checkTeam(item);
+                                        });
+                                        body.append(link);
+                                        body.append("<br/>");
+                                    });
+                                // user is not registered to any teams
+                                } else {
+                                    body.html("<span>You don't appear to be a member of any teams at the moment (</span>");
+                                    var link = $("<a>refresh</a>");
+                                    link.on("click", function(e) {
+                                        self.selectTeam();
+                                    });
+                                    body.append(link);
+                                    body.append("<span>).  Get in touch with a team leader to request access.</span>");
+                                    self.dialogs.team.setControls([{
+                                        text: "OK",
+                                        callback: function() {
+                                            self.dialogs.team.close();
+                                        }
+                                    }]).showControls();
+                                }
+                                self.dialogs.team.setBody(body).centre();
+                            },
+                            error: function(obj, status, err) {
+                                console.warn("[Team Keys] Failed to fetch teams: " + status);
+                                self.dialogs.team.setBody("<div><span>Failed to fetch a list of teams.  Retrying in 3 seconds...</span></div>");
+                                setTimeout(function() {
+                                    self.selectTeam();
+                                }, 3000);
+                            }
                         });
-                        teamDialog.append(link);
-                        teamDialog.append("<br/>");
-                    });
-                // user is not registered to any teams
-                } else {
-                    teamDialog.html("You don't appear to be a member of any teams at the moment (");
-                    var link = $("<a>refresh</a>");
-                    link.on("click", function(e) {
-                        self.selectTeam(teamDialog);
-                    });
-                    teamDialog.append(link);
-                    teamDialog.append(").  Get in touch with a team leader to request access.");
-                    dialogButtons.prop("style").display = "block";
+                        return {
+                            body: "<div><span>Loading available teams...</span></div>"
+                        };
+                    },
+                    close: function() {
+                        self.dialogs.team = null;
+                    }
                 }
-            },
-            error: function(obj, status, err) {
-                console.warn("[Team Keys] Failed to fetch teams: " + status);
-                teamDialog.html("Failed to fetch a list of teams.  Retrying in 3 seconds...");
-                setTimeout(function() {
-                    self.selectTeam(teamDialog);
-                }, 3000);
-            }
-        });
+            }).noControls().show();
+            self.dialogs.team.refresh();
+        }
     };
     // check permissions on a team, and join it
-    self.checkTeam = function checkTeam(team, teamDialog) {
-        // recycle dialog
-        if (teamDialog) {
-            teamDialog.html("Checking permissions...");
-            var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", teamDialog.parent());
+    self.checkTeam = function checkTeam(team) {
+        // if via dialog, update it
+        if (self.dialogs.team) {
+            self.dialogs.team.setBody("<div><span>Checking permissions...</span></div>");
         }
         console.log("[Team Keys] Refreshing available teams...");
         $.ajax({
@@ -835,20 +851,31 @@ function wrapper() {
                     self.saveConfig();
                     self.init();
                     self.syncKeys();
-                    if (teamDialog) {
-                        teamDialog.html("All done, you can now collaborate keys with members of " + team.team + "!");
-                        dialogButtons.prop("style").display = "block";
+                    if (self.dialogs.team) {
+                        self.dialogs.team.setBody("<div><span>All done, you can now collaborate keys with members of " + team.team + "!</span></div>").setControls([{
+                            text: "OK",
+                            callback: function() {
+                                self.dialogs.team.close();
+                            }
+                        }]).showControls().centre();
                     }
                 // no permissions since check
                 } else {
-                    if (teamDialog) {
-                        teamDialog.html("You don't seem to have permission to join that team.  Try ");
-                        var link = $("<a>refreshing the team list</a>");
+                    if (self.dialogs.team) {
+                        var body = $("<div/>");
+                        body.append("<span>You don't seem to have permission to join that team.  Try </span>");
+                        var link = $("<a>refreshing the list</a>");
                         link.on("click", function(e) {
-                            self.selectTeam(teamDialog);
+                            self.selectTeam();
                         });
-                        teamDialog.append(link);
-                        teamDialog.append(".");
+                        body.append(link);
+                        body.append("<span> and try again.</span>");
+                        self.dialogs.team.setBody(body).setControls([{
+                            text: "OK",
+                            callback: function() {
+                                self.dialogs.team.close();
+                            }
+                        }]).showControls().centre();
                     } else {
                         // remove key if already exists
                         delete window.localStorage["plugin-teamKeys-team"];
