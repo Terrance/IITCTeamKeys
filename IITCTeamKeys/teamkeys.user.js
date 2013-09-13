@@ -32,7 +32,7 @@ function wrapper() {
     window.plugin.teamKeys = function() {};
     var self = window.plugin.teamKeys;
     // user configurable options
-    self.options = {};
+    self.config = {};
     // empty cache to hold portal and user names
     self.cache = {};
     // currently open dialogs
@@ -631,7 +631,7 @@ function wrapper() {
                                         }
                                     }]).showControls().centre();
                                 } else {
-                                    self.authFail(self.dialogs.mod);
+                                    self.authFail("mod");
                                 }
                             },
                             error: function(obj, status, err) {
@@ -727,7 +727,7 @@ function wrapper() {
                         }
                     }]).showControls().centre();
                 } else {
-                    self.authFail(self.dialogs.mod);
+                    self.authFail("mod");
                 }
             },
             error: function(obj, status, err) {
@@ -893,26 +893,24 @@ function wrapper() {
         });
     };
     // lost permissions whilst logged in
-    self.authFail = function authFail(authDialog) {
+    self.authFail = function authFail(useDialog) {
         // recycle dialog
-        if (authDialog) {
-            authDialog.html("Your team membership doesn't seem to be valid.  Click OK to refresh and login again.");
-            var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", authDialog.parent());
-            dialogButtons.prop("style").display = "block";
+        if (useDialog) {
+            self.dialogs.authFail = self.dialogs[useDialog];
+            self.dialogs[useDialog] = null;
+            self.dialogs.authFail.setTitle("Team Keys: authentication").setBody("<div><span>Your team membership doesn't seem to be valid.  Click OK to refresh and login again.</span></div>");
         } else {
-            authDialog = dialog({
+            self.dialogs.authFail = self.dialog({
                 title: "Team Keys: authentication",
-                html: "Your team membership doesn't seem to be valid.  Click OK to refresh and login again."
+                body: "<div><span>Your team membership doesn't seem to be valid.  Click OK to refresh and login again.</span></div>"
             });
         }
-        // replace OK button
-        var oldButton = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix button", authDialog.parent());
-        var okButton = oldButton.clone();
-        oldButton.remove();
-        okButton.on("click", function(e) {
-            self.logout();
-        });
-        $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", authDialog.parent()).append(okButton);
+        self.dialogs.authFail.setControls([{
+            text: "OK",
+            callback: function() {
+                self.logout();
+            }
+        }]).showControls(true).centre().show(true);
     };
     // save user options to local storage
     self.saveConfig = function saveConfig() {
