@@ -2,7 +2,7 @@
 // @id             iitc-plugin-team-keys@OllieTerrance
 // @name           IITC plugin: Team Keys
 // @category       Keys
-// @version        0.0.1.6
+// @version        0.0.2.0
 // @namespace      https://github.com/jonatkins/ingress-intel-total-conversion
 // @description    Allows teams to collaborate with keys, showing all keys owned by each member of the team.
 // @include        https://www.ingress.com/intel*
@@ -44,34 +44,13 @@ function wrapper() {
             return self.cache[portal];
         // if currently on-screen
         } else if (window.portals[portal]) {
-            var name = window.portals[portal].options.details.portalV2.descriptiveText.TITLE;
+            var name = window.portals[portal].options.data.title;
             // cache for later
             self.cache[portal] = name;
             return name;
         // portal name not available
         } else {
             return "{" + portal + "}";
-        }
-    }
-    // fetch a user name from a cached list if available
-    self.getUserName = function getUserName(user) {
-        // try plugin cache
-        if (self.cache[user]) {
-            return self.cache[user];
-        // if cached by IITC
-        } else if (window.getPlayerName(user) !== "{" + user + "}" && window.getPlayerName(user) !== "unknown") {
-            var name = window.getPlayerName(user);
-            // cache for later
-            self.cache[user] = name;
-        // if in local storage
-        } else if (window.localStorage[user]) {
-            var name = window.localStorage[user];
-            // cache for later
-            self.cache[portal] = name;
-            return name;
-        // user name not available
-        } else {
-            return "{" + user + "}";
         }
     }
     // custom dialog wrapper with more flexibility
@@ -215,7 +194,7 @@ function wrapper() {
             method: "POST",
             data: {
                 action: "sync",
-                user: window.PLAYER.guid,
+                user: window.PLAYER.nickname,
                 team: self.config.team.team,
                 keys: window.plugin.keys.keys
             },
@@ -247,7 +226,6 @@ function wrapper() {
                             var entry = self.keysByEntry[x];
                             // try to cache names
                             self.getPortalName(entry.portal);
-                            self.getUserName(entry.user);
                             // if no byPortal entries for portal, start list
                             if (!self.keysByPortal[entry.portal]) {
                                 self.keysByPortal[entry.portal] = [];
@@ -354,7 +332,7 @@ function wrapper() {
     // show list of all users with keys to a single portal
     self.keysForPortal = function keysForPortal(portal) {
         self.dialog({
-            title: "Team Keys:" + trunc(self.getPortalName(portal), 20),
+            title: "Team Keys: " + trunc(self.getPortalName(portal), 20),
             callbacks: {
                 refresh: function() {
                     var props = {
@@ -373,9 +351,9 @@ function wrapper() {
                         keysByUser[keys[x]]++;
                     }
                     for (var x in keysByUser) {
-                        var link = $("<a>" + self.getUserName(x) + "</a>");
+                        var link = $("<a>" + x + "</a>");
                         link.on("click", function(e) {
-                            window.chat.addNickname("@" + self.getUserName(x));
+                            window.chat.addNickname("@" + x);
                         });
                         props.body.append(link);
                         if (keysByUser[x] > 1) {
@@ -398,8 +376,7 @@ function wrapper() {
                         body: $("<div/>")
                     };
                     $.each(self.keysByUser, function(user, portals) {
-                        var userName = self.getUserName(user);
-                        var link = $("<a>" + userName + "</a>");
+                        var link = $("<a>" + user + "</a>");
                         link.on("click", function(e) {
                             self.keysForUser(user);
                         });
@@ -417,7 +394,7 @@ function wrapper() {
     // show list of all portals with keys owned by a single user
     self.keysForUser = function keysForUser(user) {
         self.dialog({
-            title: "Team Keys:" + trunc(self.getUserName(user), 20),
+            title: "Team Keys: " + trunc(user, 20),
             callbacks: {
                 refresh: function() {
                     var props = {
@@ -491,7 +468,7 @@ function wrapper() {
                 method: "POST",
                 data: {
                     action: "members",
-                    user: window.PLAYER.guid,
+                    user: window.PLAYER.nickname,
                     team: self.config.team.team
                 },
                 success: function(resp, status, obj) {
@@ -500,14 +477,11 @@ function wrapper() {
                     // if user is authenticated
                     if (data.auth) {
                         // fetch player names
-                        var members = [];
-                        $.each(data.members, function(index, item) {
-                            members.push(self.getUserName(item));
-                        });
+                        var members = data.members;
                         var mods = [];
                         $.each(data.mods, function(index, item) {
-                            if (item !== window.PLAYER.guid) {
-                                mods.push(self.getUserName(item));
+                            if (item !== window.PLAYER.nickname) {
+                                mods.push(item);
                             }
                         });
                         var oldHeight = modDialog.height();
@@ -558,7 +532,7 @@ function wrapper() {
     self.setMod = function setMod(members, mods, modDialog) {
         var data = {
             action: "members",
-            user: window.PLAYER.guid,
+            user: window.PLAYER.nickname,
             team: self.config.team.team,
             members: [],
             mods: []
@@ -575,26 +549,8 @@ function wrapper() {
                 var mod = window.playerNameToGuid(item);
                 if (mod) {
                     // add if not current user and not already in mod list
-                    if (mod !== window.PLAYER.guid && mods.indexOf(mod) === -1) {
+                    if (mod !== window.PLAYER.nickname && mods.indexOf(mod) === -1) {
                         data.mods.push(mod);
-                    }
-                // username not cached
-                } else {
-                    noLookup.push(item);
-                }
-            }
-        });
-        $.each(members, function(index, item) {
-            // unmatched username in braces, use exact value
-            if (item.match(/^{[0-9a-f]{32}\.c}$/)) {
-                var member = item.substr(1, 34);
-            // reverse lookup name
-            } else {
-                var member = window.playerNameToGuid(item);
-                if (member) {
-                    // add if not current user and not already in either list
-                    if (member !== window.PLAYER.guid && members.indexOf(member) === -1 && mods.indexOf(member) === -1) {
-                        data.members.push(member);
                     }
                 // username not cached
                 } else {
@@ -664,7 +620,7 @@ function wrapper() {
             method: "POST",
             data: {
                 action: "teams",
-                user: window.PLAYER.guid
+                user: window.PLAYER.nickname
             },
             success: function(resp, status, obj) {
                 console.log("[Team Keys] Response received.");
@@ -720,7 +676,7 @@ function wrapper() {
             method: "POST",
             data: {
                 action: "teams",
-                user: window.PLAYER.guid
+                user: window.PLAYER.nickname
             },
             success: function(resp, status, obj) {
                 console.log("[Team Keys] Response received.");
