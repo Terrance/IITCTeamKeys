@@ -32,19 +32,9 @@ function wrapper() {
     window.plugin.teamKeys = function() {};
     var self = window.plugin.teamKeys;
     // user configurable options
-    self.config = {};
+    self.options = {};
     // empty cache to hold portal and user names
     self.cache = {};
-    // currently open dialogs
-    self.dialogs = {
-        showByPortal: null,
-        keysForPortal: {},
-        showByUser: null,
-        keysForUser: {},
-        about: null,
-        mod: null,
-        team: null
-    };
     // server script to sync with
     self.server = "http://terrance.uk.to/labs/teamkeys.php";
     // fetch a portal name from a cached list if available
@@ -154,10 +144,6 @@ function wrapper() {
                 }
                 return this;
             },
-            // shorthand to remove controls
-            noControls: function noControls() {
-                return this.setControls([]).showControls(false);
-            },
             // show or hide the whole dialog, default to toggling
             show: function show(show) {
                 if (typeof show === "undefined") {
@@ -165,14 +151,6 @@ function wrapper() {
                 } else {
                 	$(this.dialog).css("display", show ? "block" : "none");
                 }
-                return this;
-            },
-            // bring this window to the front
-            focus: function focus() {
-                $(this.dialog).detach();
-                $(document.body).append($(this.dialog));
-                $(".ui-dialog-title").removeClass("ui-dialog-title-active").addClass("ui-dialog-title-inactive");
-                $(".ui-dialog-title", this.dialog).removeClass("ui-dialog-title-inactive").addClass("ui-dialog-title-active");
                 return this;
             },
             // refresh the data in the dialog if a method is provided
@@ -199,10 +177,10 @@ function wrapper() {
                 return this;
             }
         };
-        // add callback to ok button (defaults to act like close button)
-        if (obj.callbacks.close) {
+        // add callback to ok button
+        if (obj.callbacks.ok) {
             $(".ui-dialog-buttonset button", obj.dialog).on("click", function(e) {
-                obj.callbacks.close();
+                obj.callbacks.ok();
             });
         }
         // add callback to close button
@@ -290,8 +268,6 @@ function wrapper() {
                     }
                     // re-show info on selected portal
                     self.addInfo();
-                    // update all windows
-                    self.refreshAllDialogs();
                 } else {
                     self.authFail();
                 }
@@ -340,8 +316,6 @@ function wrapper() {
                         self.syncCache();
                     }, 60000);
                 }
-                // update all windows
-                self.refreshAllDialogs();
             },
             error: function(obj, status, err) {
                 console.warn("[Team Keys] Failed to sync cache: " + status);
@@ -351,179 +325,127 @@ function wrapper() {
             }
         });
     };
-    // update all data-displaying dialogs
-    self.refreshAllDialogs = function refreshAllDialogs() {
-        // refresh single dialogs
-        $.each([self.dialogs.showByPortal, self.dialogs.showByUser], function(index, item) {
-            if (item) {
-                item.refresh();
-            }
-        });
-        // refresh all children
-        $.each([self.dialogs.keysForPortal, self.dialogs.keysForPortal], function(index, item) {
-            $.each(item, function(subIndex, subItem) {
-                subItem.refresh();
-            });
-        });
-    };
     // show list of all portals with keys
     self.showByPortal = function showByPortal() {
-        // if already open, just refresh and focus
-        if (self.dialogs.showByPortal) {
-            self.dialogs.showByPortal.refresh().focus();
-        // create a new dialog
-        } else {
-            self.dialogs.showByPortal = self.dialog({
-                title: "Team Keys: all portals",
-                callbacks: {
-                    refresh: function() {
-                        var props = {
-                            body: $("<div/>")
-                        };
-                        $.each(self.keysByPortal, function(portal, users) {
-                            var portalName = self.getPortalName(portal);
-                            var link = $("<a>" + portalName + "</a>");
-                            link.on("click", function(e) {
-                                self.keysForPortal(portal);
-                            });
-                            props.body.append(link);
-                            if (users.length > 1) {
-                                props.body.append("<span> (" + users.length + ")</span>");
-                            }
-                            props.body.append("<br/>");
+        self.dialog({
+            title: "Team Keys: all portals",
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    $.each(self.keysByPortal, function(portal, users) {
+                        var portalName = self.getPortalName(portal);
+                        var link = $("<a>" + portalName + "</a>");
+                        link.on("click", function(e) {
+                            self.keysForPortal(portal);
                         });
-                        return props;
-                    },
-                    close: function() {
-                        self.dialogs.showByPortal = null;
-                    }
+                        props.body.append(link);
+                        if (users.length > 1) {
+                            props.body.append("<span> (" + users.length + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    });
+                    return props;
                 }
-            }).noControls().refresh().show();
-        }
+            }
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all users with keys to a single portal
     self.keysForPortal = function keysForPortal(portal) {
-        // if already open, just refresh and focus
-        if (self.dialogs.keysForPortal[portal]) {
-            self.dialogs.keysForPortal[portal].refresh().focus();
-        // create a new dialog
-        } else {
-            self.dialogs.keysForPortal[portal] = self.dialog({
-                title: "Team Keys:" + trunc(self.getPortalName(portal), 20),
-                callbacks: {
-                    refresh: function() {
-                        var props = {
-                            body: $("<div/>")
-                        };
-                        var keys = self.keysByPortal[portal];
-                        var keysByUser = {};
-                        /* {
-                            user: count,
-                            ...
-                        } */
-                        for (var x in keys) {
-                            if (!keysByUser[keys[x]]) {
-                                keysByUser[keys[x]] = 0;
-                            }
-                            keysByUser[keys[x]]++;
+        self.dialog({
+            title: "Team Keys:" + trunc(self.getPortalName(portal), 20),
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    var keys = self.keysByPortal[portal];
+                    var keysByUser = {};
+                    /* {
+                        user: count,
+                        ...
+                    } */
+                    for (var x in keys) {
+                        if (!keysByUser[keys[x]]) {
+                            keysByUser[keys[x]] = 0;
                         }
-                        for (var x in keysByUser) {
-                            var link = $("<a>" + self.getUserName(x) + "</a>");
-                            link.on("click", function(e) {
-                                window.chat.addNickname("@" + self.getUserName(x));
-                            });
-                            props.body.append(link);
-                            if (keysByUser[x] > 1) {
-                                props.body.append("<span> (" + keysByUser[x] + ")</span>");
-                            }
-                            props.body.append("<br/>");
-                        }
-                        return props;
-                    },
-                    close: function() {
-                        delete self.dialogs.keysForPortal[portal];
+                        keysByUser[keys[x]]++;
                     }
+                    for (var x in keysByUser) {
+                        var link = $("<a>" + self.getUserName(x) + "</a>");
+                        link.on("click", function(e) {
+                            window.chat.addNickname("@" + self.getUserName(x));
+                        });
+                        props.body.append(link);
+                        if (keysByUser[x] > 1) {
+                            props.body.append("<span> (" + keysByUser[x] + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    }
+                    return props;
                 }
-            }).noControls().refresh().show();
-        }
+            }
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all users with keys
     self.showByUser = function showByUser() {
-        // if already open, just refresh and focus
-        if (self.dialogs.showByUser) {
-            self.dialogs.showByUser.refresh().focus();
-        // create a new dialog
-        } else {
-            self.dialogs.showByUser = self.dialog({
-                title: "Team Keys: all members",
-                callbacks: {
-                    refresh: function() {
-                        var props = {
-                            body: $("<div/>")
-                        };
-                        $.each(self.keysByUser, function(user, portals) {
-                            var userName = self.getUserName(user);
-                            var link = $("<a>" + userName + "</a>");
-                            link.on("click", function(e) {
-                                self.keysForUser(user);
-                            });
-                            props.body.append(link);
-                            if (portals.length > 1) {
-                                props.body.append("<span> (" + portals.length + ")</span>");
-                            }
-                            props.body.append("<br/>");
+        self.dialog({
+            title: "Team Keys: all members",
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    $.each(self.keysByUser, function(user, portals) {
+                        var userName = self.getUserName(user);
+                        var link = $("<a>" + userName + "</a>");
+                        link.on("click", function(e) {
+                            self.keysForUser(user);
                         });
-                        return props;
-                    },
-                    close: function() {
-                        self.dialogs.showByUser = null;
-                    }
+                        props.body.append(link);
+                        if (portals.length > 1) {
+                            props.body.append("<span> (" + portals.length + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    });
+                    return props;
                 }
-            }).noControls().refresh().show();
-        }
+            }
+        }).setControls([]).showControls().refresh().show();
     };
     // show list of all portals with keys owned by a single user
     self.keysForUser = function keysForUser(user) {
-        // if already open, just refresh and focus
-        if (self.dialogs.keysForUser[user]) {
-            self.dialogs.keysForUser[user].refresh().focus();
-        // create a new dialog
-        } else {
-            self.dialogs.keysForUser[user] = self.dialog({
-                title: "Team Keys:" + trunc(self.getUserName(user), 20),
-                callbacks: {
-                    refresh: function() {
-                        var props = {
-                            body: $("<div/>")
-                        };
-                        var keys = self.keysByUser[user];
-                        var keysByPortal = {};
-                        /* {
-                            portal: count,
-                            ...
-                        } */
-                        for (var x in keys) {
-                            if (!keysByPortal[keys[x]]) {
-                                keysByPortal[keys[x]] = 0;
-                            }
-                            keysByPortal[keys[x]]++;
+        self.dialog({
+            title: "Team Keys:" + trunc(self.getUserName(user), 20),
+            callbacks: {
+                refresh: function() {
+                    var props = {
+                        body: $("<div/>")
+                    };
+                    var keys = self.keysByUser[user];
+                    var keysByPortal = {};
+                    /* {
+                        portal: count,
+                        ...
+                    } */
+                    for (var x in keys) {
+                        if (!keysByPortal[keys[x]]) {
+                            keysByPortal[keys[x]] = 0;
                         }
-                        for (var x in keysByPortal) {
-                            props.body.append("<span>" + self.getPortalName(x) + "</span>");
-                            if (keysByPortal[x] > 1) {
-                                props.body.append("<span> (" + keysByPortal[x] + ")</span>");
-                            }
-                            props.body.append("<br/>");
-                        }
-                        return props;
-                    },
-                    close: function() {
-                        console.log(user);
-                        delete self.dialogs.keysForUser[user];
+                        keysByPortal[keys[x]]++;
                     }
+                    for (var x in keysByPortal) {
+                        props.body.append("<span>" + self.getPortalName(x) + "</span>");
+                        if (keysByPortal[x] > 1) {
+                            props.body.append("<span> (" + keysByPortal[x] + ")</span>");
+                        }
+                        props.body.append("<br/>");
+                    }
+                    return props;
                 }
-            }).noControls().refresh().show();
-        }
+            }
+        }).setControls([]).showControls().refresh().show();
     };
     // add info text under key controls
     self.addInfo = function addInfo() {
@@ -538,124 +460,102 @@ function wrapper() {
     };
     // about window for help and information
     self.showAbout = function showAbout() {
-        // if already open, just focus
-        if (self.dialogs.about) {
-            self.dialogs.about.focus();
-        // create a new dialog
-        } else {
-            var body = $("<div/>");
-            body.append("<strong><a href=\"http://github.com/OllieTerrance/IITCTeamKeys\">Team Keys</a></strong>");
-            body.append("<span> by </span><a href=\"http://terrance.uk.to\">Ollie Terrance</a><br/><br/>");
-            body.append("<span>Having issues?  Try logging out of your team and back in again.  You can also </span>");
-            var link = $("<a>purge all plugin data</a>");
-            link.on("click", function(e) {
-                self.purgeConfig();
-            });
-            body.append(link);
-            body.append("<span> from the browser.  This will not affect your keys, as they are stored independently to this plugin.</span>");
-            self.dialogs.about = self.dialog({
-                title: "Team Keys: about",
-                body: body,
-                callbacks: {
-                    close: function() {
-                        self.dialogs.about = null;
-                    }
-                }
-            }).show();
-        }
+        var body = $("<div/>");
+        body.append("<strong><a href=\"http://github.com/OllieTerrance/IITCTeamKeys\">Team Keys</a></strong>");
+        body.append("<span> by </span><a href=\"http://terrance.uk.to\">Ollie Terrance</a><br/><br/>");
+        body.append("<span>Having issues?  Try logging out of your team and back in again.  You can also </span>");
+        var link = $("<a>purge all plugin data</a>");
+        link.on("click", function(e) {
+            self.purgeConfig();
+        });
+        body.append(link);
+        body.append("<span> from the browser.  This will not affect your keys, as they are stored independently to this plugin.</span>");
+        self.dialog({
+            title: "Team Keys: about",
+            body: body
+        }).show();
     };
     // mods only: moderator window for managing team
     self.showMod = function showMod() {
-        // if already open, just refresh and focus
-        if (self.dialogs.mod) {
-            self.dialogs.mod.noControls().refresh().focus();
-        // create a new dialog
-        } else if (self.config.team.role === 1) {
-            self.dialogs.mod = self.dialog({
+        if (self.config.team.role === 1) {
+            var modDialog = dialog({
                 title: "Team Keys: team moderation",
-                body: "<div><span>Loading team members...</span></div>",
-                callbacks: {
-                    refresh: function() {
-                        console.log("[Team Keys] Refreshing team members...");
-                        $.ajax({
-                            url: self.server,
-                            method: "POST",
-                            data: {
-                                action: "members",
-                                user: window.PLAYER.guid,
-                                team: self.config.team.team
-                            },
-                            success: function(resp, status, obj) {
-                                console.log("[Team Keys] Response received.");
-                                var data = JSON.parse(resp);
-                                // if user is authenticated
-                                if (data.auth) {
-                                    // fetch player names
-                                    var members = [];
-                                    $.each(data.members, function(index, item) {
-                                        members.push(self.getUserName(item));
-                                    });
-                                    var mods = [];
-                                    $.each(data.mods, function(index, item) {
-                                        if (item !== window.PLAYER.guid) {
-                                            mods.push(self.getUserName(item));
-                                        }
-                                    });
-                                    var body = $("<div/>");
-                                    body.append("<strong>Team: " + self.config.team.team + "</strong><br/><br/>");
-                                    body.append("<span>Enter the usernames of people you wish to add to the team, one per line.<br/><br/>");
-                                    body.append("<span>Note: you don't need to include yourself in the moderator list.  You also cannot remove yourself from the moderators list; you must first assign another moderator and ask them to remove you.</span><br/><br/>");
-                                    var membersField = $("<textarea rows='10' style='width: 100%;'/>").val(members.sort().join("\n"));
-                                    body.append("<strong>Members</strong><span> (</span>");
-                                    var link = $("<a>sort</a>");
-                                    link.on("click", function(e) {
-                                        membersField.val(membersField.val().split("\n").sort().join("\n"));
-                                    });
-                                    body.append(link);
-                                    body.append("<span>)</span><br/>");
-                                    body.append(membersField);
-                                    var modsField = $("<textarea rows='5' style='width: 100%;'/>").val(mods.sort().join("\n"));
-                                    body.append("<strong>Moderators</strong><span> (</span>");
-                                    var link = $("<a>sort</a>");
-                                    link.on("click", function(e) {
-                                        modsField.val(modsField.val().split("\n").sort().join("\n"));
-                                    });
-                                    body.append(link);
-                                    body.append("<span>)</span><br/>");
-                                    body.append(modsField);
-                                    // update window
-                                    self.dialogs.mod.setBody(body).setControls([{
-                                        text: "OK",
-                                        callback: function(e) {
-                                            self.setMod(membersField.val(), modsField.val());
-                                        }
-                                    }]).showControls().centre();
-                                } else {
-                                    self.authFail("mod");
-                                }
-                            },
-                            error: function(obj, status, err) {
-                                console.warn("[Team Keys] Failed to get team: " + status);
-                                self.dialogs.mod.setBody("<div><span>Failed to fetch a list of members.  Retrying in 3 seconds...</span></div>");
-                                setTimeout(function() {
-                                    self.dialogs.mod.refresh();
-                                }, 5000);
+                html: "Loading team members..."
+            });
+            // hide OK button
+            var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", modDialog.parent());
+            dialogButtons.prop("style").display = "none";
+            console.log("[Team Keys] Refreshing team members...");
+            $.ajax({
+                url: self.server,
+                method: "POST",
+                data: {
+                    action: "members",
+                    user: window.PLAYER.guid,
+                    team: self.config.team.team
+                },
+                success: function(resp, status, obj) {
+                    console.log("[Team Keys] Response received.");
+                    var data = JSON.parse(resp);
+                    // if user is authenticated
+                    if (data.auth) {
+                        // fetch player names
+                        var members = [];
+                        $.each(data.members, function(index, item) {
+                            members.push(self.getUserName(item));
+                        });
+                        var mods = [];
+                        $.each(data.mods, function(index, item) {
+                            if (item !== window.PLAYER.guid) {
+                                mods.push(self.getUserName(item));
                             }
                         });
-                        return {
-                            body: "<div><span>Loading team members...</span></div>"
-                        };
-                    },
-                    close: function() {
-                        self.dialogs.mod = null;
+                        var oldHeight = modDialog.height();
+                        modDialog.html("<strong>Team: " + self.config.team.team + "</strong><br/><br/>Enter the usernames of people you wish to add to the team, one per line.<br/><br/>Note: you don't need to include yourself in the moderator list.  You also cannot remove yourself from the moderators list; you must first assign another moderator and ask them to remove you.<br/><br/>");
+                        var membersField = $("<textarea rows='10' style='width: 100%;'/>").val(members.sort().join("\n"));
+                        modDialog.append("<strong>Members</strong> (");
+                        var link = $("<a>sort</a>");
+                        link.on("click", function(e) {
+                            membersField.val(membersField.val().split("\n").sort().join("\n"));
+                        });
+                        modDialog.append(link);
+                        modDialog.append(")<br/>");
+                        modDialog.append(membersField);
+                        var modsField = $("<textarea rows='5' style='width: 100%;'/>").val(mods.sort().join("\n"));
+                        modDialog.append("<strong>Moderators</strong> (");
+                        var link = $("<a>sort</a>");
+                        link.on("click", function(e) {
+                            modsField.val(modsField.val().split("\n").sort().join("\n"));
+                        });
+                        modDialog.append(link);
+                        modDialog.append(")<br/>");
+                        modDialog.append(modsField);
+                        // replace OK button
+                        var oldButton = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix button", modDialog.parent());
+                        var okButton = oldButton.clone();
+                        oldButton.remove();
+                        okButton.on("click", function(e) {
+                            self.setMod(membersField.val(), modsField.val(), modDialog);
+                        });
+                        // re-position dialog to centre
+                        $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", modDialog.parent()).append(okButton);
+                        dialogButtons.prop("style").display = "block";
+                        modDialog.parent().prop("style").top = parseInt(modDialog.parent().prop("style").top) - ((modDialog.height() - oldHeight) / 2) + "px";
+                    } else {
+                        self.authFail(modDialog);
                     }
+                },
+                error: function(obj, status, err) {
+                    console.warn("[Team Keys] Failed to sync: " + status);
+                    setTimeout(function() {
+                        self.syncKeys();
+                    }, 5000);
                 }
-            }).noControls().show();
-            self.dialogs.mod.refresh();
+            });
         }
     };
     // mods only: update the list of members in the team
-    self.setMod = function setMod(members, mods) {
+    self.setMod = function setMod(members, mods, modDialog) {
         var data = {
             action: "members",
             user: window.PLAYER.guid,
@@ -680,7 +580,7 @@ function wrapper() {
                     }
                 // username not cached
                 } else {
-                    noLookup.push("<span>" + item + "</span>");
+                    noLookup.push(item);
                 }
             }
         });
@@ -698,11 +598,15 @@ function wrapper() {
                     }
                 // username not cached
                 } else {
-                    noLookup.push("<span>" + item + "</span>");
+                    noLookup.push(item);
                 }
             }
         });
-        self.dialogs.mod.setBody("<div><span>Updating members...</span></div>").noControls().centre();
+        var oldHeight = modDialog.height();
+        var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", modDialog.parent());
+        dialogButtons.prop("style").display = "none";
+        modDialog.html("Updating members...");
+        modDialog.parent().prop("style").top = parseInt(modDialog.parent().prop("style").top) - ((modDialog.height() - oldHeight) / 2) + "px";
         console.log("[Team Keys] Updating team members...");
         $.ajax({
             url: self.server,
@@ -712,115 +616,103 @@ function wrapper() {
                 console.log("[Team Keys] Response received.");
                 var data = JSON.parse(resp);
                 if (data.auth) {
-                    var body = $("<div/>");
-                    body.append("<span>Team members have been saved.</span>");
+                    modDialog.html("Team members have been saved.");
                     // list non-cached usernames
                     if (noLookup.length) {
-                        body.append("<br/><br/><span>However, the following usernames did not resolve.  This happens if the user has not visited recently, and has no activity on the map.</span><br/><br/>");
-                        body.append(noLookup.join("<br/>"));
+                        modDialog.append("<br/><br/>However, the following usernames did not resolve.  This happens if the user has not visited recently, and has no activity on the map.<br/><br/>");
+                        modDialog.append(noLookup.join("<br/>"));
                     }
-                    // update window
-                    self.dialogs.mod.setBody(body).setControls([{
-                        text: "OK",
-                        callback: function(e) {
-                            self.dialogs.mod.close();
-                        }
-                    }]).showControls().centre();
+                    // restore default OK button
+                    var oldButton = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix button", modDialog.parent());
+                    var okButton = oldButton.clone();
+                    oldButton.remove();
+                    okButton.on("click", function(e) {
+                        modDialog.parent().dialog().dialog("close");
+                    });
+                    // re-position dialog to centre
+                    $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", modDialog.parent()).append(okButton);
+                    dialogButtons.prop("style").display = "block";
                 } else {
-                    self.authFail("mod");
+                    self.authFail(modDialog);
                 }
             },
             error: function(obj, status, err) {
                 console.warn("[Team Keys] Failed to set mods: " + status);
-                self.dialogs.mod.setBody("<div><span>Failed to update team members.  Retrying in 3 seconds...</span></div>");
+                modDialog.html("Failed to update team members.  Retrying in 3 seconds...");
                 setTimeout(function() {
-                    self.setMod(members, mods);
+                    self.setMod(members, mods, modDialog);
                 }, 3000);
             }
         });
     };
     // list of teams available to the user
-    self.selectTeam = function selectTeam() {
-        if (self.dialogs.team) {
-            self.dialogs.team.noControls().refresh().focus();
+    self.selectTeam = function selectTeam(teamDialog) {
+        if (teamDialog) {
+            teamDialog.html("Loading available teams...");
         } else {
-            self.dialogs.team = self.dialog({
+            teamDialog = dialog({
                 title: "Team Keys: select team",
-                html: "<div><span>Loading available teams...</span></div>",
-                callbacks: {
-                    refresh: function() {
-                        console.log("[Team Keys] Refreshing available teams...");
-                        $.ajax({
-                            url: self.server,
-                            method: "POST",
-                            data: {
-                                action: "teams",
-                                user: window.PLAYER.guid
-                            },
-                            success: function(resp, status, obj) {
-                                console.log("[Team Keys] Response received.");
-                                var data = JSON.parse(resp);
-                                var body = $("<div/>");
-                                // teams available
-                                if (data.count) {
-                                    body.append("<span>You are a member of " + data.count + " team" + (data.count > 1 ? "s" : "") + " (</span>");
-                                    var link = $("<a>refresh</a>");
-                                    link.on("click", function(e) {
-                                        self.selectTeam();
-                                    });
-                                    body.append(link);
-                                    body.append("<span>).  Select one below to start collaborating keys.</span><br/><br/>");
-                                    $.each(data.teams, function(index, item) {
-                                        var link = $("<a>" + item.team + " (" + ["member", "moderator"][item.role] + ")</a>");
-                                        link.on("click", function(e) {
-                                            self.checkTeam(item);
-                                        });
-                                        body.append(link);
-                                        body.append("<br/>");
-                                    });
-                                // user is not registered to any teams
-                                } else {
-                                    body.html("<span>You don't appear to be a member of any teams at the moment (</span>");
-                                    var link = $("<a>refresh</a>");
-                                    link.on("click", function(e) {
-                                        self.selectTeam();
-                                    });
-                                    body.append(link);
-                                    body.append("<span>).  Get in touch with a team leader to request access.</span>");
-                                    self.dialogs.team.setControls([{
-                                        text: "OK",
-                                        callback: function() {
-                                            self.dialogs.team.close();
-                                        }
-                                    }]).showControls();
-                                }
-                                self.dialogs.team.setBody(body).centre();
-                            },
-                            error: function(obj, status, err) {
-                                console.warn("[Team Keys] Failed to fetch teams: " + status);
-                                self.dialogs.team.setBody("<div><span>Failed to fetch a list of teams.  Retrying in 3 seconds...</span></div>");
-                                setTimeout(function() {
-                                    self.selectTeam();
-                                }, 3000);
-                            }
-                        });
-                        return {
-                            body: "<div><span>Loading available teams...</span></div>"
-                        };
-                    },
-                    close: function() {
-                        self.dialogs.team = null;
-                    }
-                }
-            }).noControls().show();
-            self.dialogs.team.refresh();
+                html: "Loading available teams..."
+            });
         }
+        // hide OK button
+        var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", teamDialog.parent());
+        dialogButtons.prop("style").display = "none";
+        console.log("[Team Keys] Refreshing available teams...");
+        $.ajax({
+            url: self.server,
+            method: "POST",
+            data: {
+                action: "teams",
+                user: window.PLAYER.guid
+            },
+            success: function(resp, status, obj) {
+                console.log("[Team Keys] Response received.");
+                var data = JSON.parse(resp);
+                // teams available
+                if (data.count) {
+                    teamDialog.html("You are a member of " + data.count + " team" + (data.count > 1 ? "s" : "") + " (");
+                    var link = $("<a>refresh</a>");
+                    link.on("click", function(e) {
+                        self.selectTeam(teamDialog);
+                    });
+                    teamDialog.append(link);
+                    teamDialog.append(").  Select one below to start collaborating keys.<br/><br/>");
+                    $.each(data.teams, function(index, item) {
+                        var link = $("<a>" + item.team + " (" + ["member", "moderator"][item.role] + ")</a>");
+                        link.on("click", function(e) {
+                            self.checkTeam(item, teamDialog);
+                        });
+                        teamDialog.append(link);
+                        teamDialog.append("<br/>");
+                    });
+                // user is not registered to any teams
+                } else {
+                    teamDialog.html("You don't appear to be a member of any teams at the moment (");
+                    var link = $("<a>refresh</a>");
+                    link.on("click", function(e) {
+                        self.selectTeam(teamDialog);
+                    });
+                    teamDialog.append(link);
+                    teamDialog.append(").  Get in touch with a team leader to request access.");
+                    dialogButtons.prop("style").display = "block";
+                }
+            },
+            error: function(obj, status, err) {
+                console.warn("[Team Keys] Failed to fetch teams: " + status);
+                teamDialog.html("Failed to fetch a list of teams.  Retrying in 3 seconds...");
+                setTimeout(function() {
+                    self.selectTeam(teamDialog);
+                }, 3000);
+            }
+        });
     };
     // check permissions on a team, and join it
-    self.checkTeam = function checkTeam(team) {
-        // if via dialog, update it
-        if (self.dialogs.team) {
-            self.dialogs.team.setBody("<div><span>Checking permissions...</span></div>");
+    self.checkTeam = function checkTeam(team, teamDialog) {
+        // recycle dialog
+        if (teamDialog) {
+            teamDialog.html("Checking permissions...");
+            var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", teamDialog.parent());
         }
         console.log("[Team Keys] Refreshing available teams...");
         $.ajax({
@@ -851,31 +743,20 @@ function wrapper() {
                     self.saveConfig();
                     self.init();
                     self.syncKeys();
-                    if (self.dialogs.team) {
-                        self.dialogs.team.setBody("<div><span>All done, you can now collaborate keys with members of " + team.team + "!</span></div>").setControls([{
-                            text: "OK",
-                            callback: function() {
-                                self.dialogs.team.close();
-                            }
-                        }]).showControls().centre();
+                    if (teamDialog) {
+                        teamDialog.html("All done, you can now collaborate keys with members of " + team.team + "!");
+                        dialogButtons.prop("style").display = "block";
                     }
                 // no permissions since check
                 } else {
-                    if (self.dialogs.team) {
-                        var body = $("<div/>");
-                        body.append("<span>You don't seem to have permission to join that team.  Try </span>");
-                        var link = $("<a>refreshing the list</a>");
+                    if (teamDialog) {
+                        teamDialog.html("You don't seem to have permission to join that team.  Try ");
+                        var link = $("<a>refreshing the team list</a>");
                         link.on("click", function(e) {
-                            self.selectTeam();
+                            self.selectTeam(teamDialog);
                         });
-                        body.append(link);
-                        body.append("<span> and try again.</span>");
-                        self.dialogs.team.setBody(body).setControls([{
-                            text: "OK",
-                            callback: function() {
-                                self.dialogs.team.close();
-                            }
-                        }]).showControls().centre();
+                        teamDialog.append(link);
+                        teamDialog.append(".");
                     } else {
                         // remove key if already exists
                         delete window.localStorage["plugin-teamKeys-team"];
@@ -893,24 +774,26 @@ function wrapper() {
         });
     };
     // lost permissions whilst logged in
-    self.authFail = function authFail(useDialog) {
+    self.authFail = function authFail(authDialog) {
         // recycle dialog
-        if (useDialog) {
-            self.dialogs.authFail = self.dialogs[useDialog];
-            self.dialogs[useDialog] = null;
-            self.dialogs.authFail.setTitle("Team Keys: authentication").setBody("<div><span>Your team membership doesn't seem to be valid.  Click OK to refresh and login again.</span></div>");
+        if (authDialog) {
+            authDialog.html("Your team membership doesn't seem to be valid.  Click OK to refresh and login again.");
+            var dialogButtons = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix", authDialog.parent());
+            dialogButtons.prop("style").display = "block";
         } else {
-            self.dialogs.authFail = self.dialog({
+            authDialog = dialog({
                 title: "Team Keys: authentication",
-                body: "<div><span>Your team membership doesn't seem to be valid.  Click OK to refresh and login again.</span></div>"
+                html: "Your team membership doesn't seem to be valid.  Click OK to refresh and login again."
             });
         }
-        self.dialogs.authFail.setControls([{
-            text: "OK",
-            callback: function() {
-                self.logout();
-            }
-        }]).showControls(true).centre().show(true);
+        // replace OK button
+        var oldButton = $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix button", authDialog.parent());
+        var okButton = oldButton.clone();
+        oldButton.remove();
+        okButton.on("click", function(e) {
+            self.logout();
+        });
+        $(".ui-dialog-buttonpane.ui-widget-content.ui-helper-clearfix .ui-dialog-buttonset", authDialog.parent()).append(okButton);
     };
     // save user options to local storage
     self.saveConfig = function saveConfig() {
