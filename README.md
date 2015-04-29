@@ -35,7 +35,7 @@ A number of links are added to the toolbox, allowing you to get a list of all te
 Running Your Own
 ----------------
 
-Upload the **teamkeys.php** file to your server, and update the value of `window.plugin.teamKeys.server` in **teamkeys.user.js**.
+Upload the **teamkeys.php** file to your server, set the database connection details, and update the value of `window.plugin.teamKeys.server` in **teamkeys.user.js**.
 
 The database for this plugin has three tables:
 
@@ -63,3 +63,12 @@ CREATE TABLE `teamkeys__cache` (
   PRIMARY KEY (`key`)
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8;
 ```
+
+Note that you will need to create your teams manually:
+
+```sql
+INSERT INTO `teamkeys__teams` (`user`, `team`, `role`)
+  VALUES ("<your Ingress agent name>", "<team name>", 1);
+```
+
+Also, the server hosting the PHP script must provide it using HTTPS, otherwise browsers will reject requests to it from the Intel page.
