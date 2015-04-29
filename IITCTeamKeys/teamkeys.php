@@ -3,6 +3,7 @@
 require_once getenv("PHPLIB") . "keystore.php";
 $conn = mysqli_connect(keystore("mysql", "db"), keystore("mysql", "user"), keystore("mysql", "pass"));
 mysqli_select_db($conn, "terrance_labs");
+header('Access-Control-Allow-Origin: https://www.ingress.com');
 // only accept requests directly from the Intel page
 if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
     switch ($_POST["action"]) {
