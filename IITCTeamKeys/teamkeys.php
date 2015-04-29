@@ -1,4 +1,4 @@
-<?
+<?php
 // connect to database
 require_once getenv("PHPLIB") . "keystore.php";
 $conn = mysqli_connect(keystore("mysql", "db"), keystore("mysql", "user"), keystore("mysql", "pass"));
