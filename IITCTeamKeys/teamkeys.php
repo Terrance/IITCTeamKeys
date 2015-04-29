@@ -164,7 +164,7 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                 if (mysqli_num_rows(mysqli_query($conn, 'SELECT `id` FROM `teamkeys__teams` WHERE `user` = "' . mysqli_real_escape_string($conn, $user) .
                                                         '" AND `team` = "' . mysqli_real_escape_string($conn, $team) . '" AND `role` = 1;')) === 1) {
                     // submitted new list of members
-                    if ($_POST["members"] || $_POST["mods"]) {
+                    if (isset($_POST["members"]) || isset($_POST["mods"])) {
                         // remove existing members, except self (cannot be changed)
                         mysqli_query($conn, 'DELETE FROM `teamkeys__teams` WHERE `team` = "' . mysqli_real_escape_string($conn, $team) .
                                             '" AND `user` <> "' . mysqli_real_escape_string($conn, $user) . '";');
