@@ -3,7 +3,7 @@ Introduction
 
 Team Keys is a plugin for [Ingress Intel Total Conversion](http://github.com/jonatkins/ingress-intel-total-conversion), that builds on the [Keys plugin](http://iitc.jonatkins.com/?page=desktop#plugin-keys) to allow teams to collaborate with their lists of keys.
 
-Teams are run by moderators, who can add new members to their teams.  These members are able to see any keys anyone declares in their inventory.  This plugin (nor the Keys plugin) can actually read your Ingress inventory - you have to manually enter your keys.
+Teams are run by moderators, who can add new members to their teams.  These members are able to see any keys anyone declares in their inventory.  Neither this plugin nor the Keys plugin can actually read your Ingress inventory - you have to manually enter your keys.
 
 
 Installation
