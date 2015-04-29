@@ -47,7 +47,7 @@ CREATE TABLE `teamkeys__keys` (
   `portal` varchar(36) NOT NULL,
   `count` int(11) NOT NULL,
   PRIMARY KEY (`id`)
-) ENGINE=MyISAM  DEFAULT CHARSET=uft8 AUTO_INCREMENT=1 ;
+) ENGINE=MyISAM  DEFAULT CHARSET=utf8 AUTO_INCREMENT=1 ;
 
 CREATE TABLE `teamkeys__teams` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
