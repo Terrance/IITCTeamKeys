@@ -1,11 +1,10 @@
 <?php
 // connect to database
-require_once getenv("PHPLIB") . "keystore.php";
-$conn = mysqli_connect(keystore("mysql", "db"), keystore("mysql", "user"), keystore("mysql", "pass"));
-mysqli_select_db($conn, "terrance_labs");
-header('Access-Control-Allow-Origin: https://www.ingress.com');
+$dbFile = "teamkeys.db";
+$db = require_once getenv("PHPLIB") . "db.php";
+header("Access-Control-Allow-Origin: https://www.ingress.com");
 // only accept requests directly from the Intel page
-if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
+if (strpos($_SERVER["HTTP_REFERER"], "https://www.ingress.com/") !== false) {
     switch ($_POST["action"]) {
         // download an entire list of keys (optionally submit a new set of keys to upload)
         case "sync":
@@ -13,31 +12,28 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
             if ($_POST["user"] && $_POST["team"]) {
                 $user = $_POST["user"];
                 $team = $_POST["team"];
-                if (mysqli_num_rows(mysqli_query($conn, 'SELECT `id` FROM `teamkeys__teams` WHERE `user` = "' . mysqli_real_escape_string($conn, $user) .
-                                                        '" AND `team` = "' . mysqli_real_escape_string($conn, $team) . '";')) === 1) {
+                if ($db->has("teams", array("AND" => array("user" => $user, "team" => $team)))) {
                     // submitted new keys to upload
                     if (isset($_POST["keys"])) {
                         // remove existing keys
-                        mysqli_query($conn, 'DELETE FROM `teamkeys__keys` WHERE `user` = "' . mysqli_real_escape_string($conn, $user) .
-                                            '" AND `team` = "' . mysqli_real_escape_string($conn, $team) . '";');
+                        $db->delete("keys", array("AND" => array("user" => $user, "team" => $team)));
                         // add new keys
+                        $data = array();
                         foreach ($_POST["keys"] as $portal => $count) {
-                            mysqli_query($conn, 'INSERT INTO `teamkeys__keys` (`user`, `team`, `portal`, `count`) VALUES ("' . mysqli_real_escape_string($conn, $user) . '", "' .
-                                                mysqli_real_escape_string($conn, $team) . '", "' . mysqli_real_escape_string($conn, $portal) . '", ' . mysqli_real_escape_string($conn, $count) . ');');
+                            array_push($data, array("user" => $user, "team" => $team, "portal" => $portal, "count" => $count));
                         }
+                        $db->insert("keys", $data);
                     }
                     // fetch all team keys
-                    $result = mysqli_query($conn, 'SELECT * FROM `teamkeys__keys` WHERE `team` = "' . mysqli_real_escape_string($conn, $team) . '";');
-                    $count = mysqli_num_rows($result);
-                    $out = '{"auth": true, "count": ' . $count;
-                    if ($count) {
+                    $result = $db->select("keys", "*", array("team" => $team));
+                    $out = '{"auth": true, "count": ' . count($result);
+                    if (count($result)) {
                         $out .= ', "keys": [';
                         $i = 0;
-                        while ($i < $count) {
-                            $row = mysqli_fetch_assoc($result);
+                        foreach ($result as $row) {
                             $out .= '{"user": "' . $row["user"] . '", "portal": "' . $row["portal"] . '", "count": ' . $row["count"] . '}';
                             $i++;
-                            if ($i < $count) {
+                            if ($i < count($result)) {
                                 $out .= ', ';
                             }
                         }
@@ -53,7 +49,6 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                         ]
                     } */
                     print($out);
-                    mysqli_free_result($result);
                 } else {
                     print('{"auth": false}');
                 }
@@ -73,32 +68,23 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                 foreach ($cache as $i => $str) {
                     list($key, $value) = explode("|", $str);
                     // if not in cache already, or different value, add/update it
-                    $result = mysqli_query($conn, 'SELECT `value` FROM `teamkeys__cache` WHERE `key` = "' . mysqli_real_escape_string($conn, $key) . '";');
-                    if (mysqli_num_rows($result) === 0) {
-                        print("New: " . $key . "\n");
-                        mysqli_query($conn, 'INSERT INTO `teamkeys__cache` (`key`, `value`) VALUES ("' . mysqli_real_escape_string($conn, $key) . '", "' .
-                                            mysqli_real_escape_string($conn, $value) . '");');
-                    } else {
-                        $row = mysqli_fetch_assoc($result);
-                        if ($value !== $row["value"]) {
-                            print("Update: " . $key . "\n");
-                            mysqli_query($conn, 'UPDATE `teamkeys__cache` SET `value` = "' . mysqli_real_escape_string($conn, $value) .
-                                                '" WHERE `key` = "' . mysqli_real_escape_string($conn, $key) . '";');
-                        }
+                    $result = $db->select("cache", "*", array("key" => $key));
+                    if (count($result) === 0) {
+                        $db->update("cache", array("key" => $key, "value" => $value));
+                    } elseif ($value !== $result[0]["value"]) {
+                        $db->update("cache", array("value" => $value), array("key" => $key));
                     }
                 }
                 // return new cache
-                $result = mysqli_query($conn, 'SELECT * FROM `teamkeys__cache`;');
-                $count = mysqli_num_rows($result);
-                $out = '{"count": ' . $count;
-                if ($count) {
+                $result = $db->select("cache", "*");
+                $out = '{"count": ' . count($result);
+                if (count($result)) {
                     $out .= ', "cache": {';
                     $i = 0;
-                    while ($i < $count) {
-                        $row = mysqli_fetch_assoc($result);
+                    foreach ($result as $row) {
                         $out .= '"' . $row["key"] . '": "' . addcslashes($row["value"], '"\\/') . '"';
                         $i++;
-                        if ($i < $count) {
+                        if ($i < count($result)) {
                             $out .= ', ';
                         }
                     }
@@ -113,7 +99,6 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                     }
                 } */
                 print($out);
-                mysqli_free_result($result);
             } else {
                 print('{"auth": false}');
             }
@@ -124,17 +109,15 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
             if ($_POST["user"]) {
                 $user = $_POST["user"];
                 // fetch all teams
-                $result = mysqli_query($conn, 'SELECT * FROM `teamkeys__teams` WHERE `user` = "' . mysqli_real_escape_string($conn, $user) . '";');
-                $count = mysqli_num_rows($result);
-                $out = '{"auth": true, "count": ' . $count;
-                if ($count) {
+                $result = $db->select("teams", "*", array("user" => $user));
+                $out = '{"auth": true, "count": ' . count($result);
+                if (count($result)) {
                     $out .= ', "teams": [';
                     $i = 0;
-                    while ($i < $count) {
-                        $row = mysqli_fetch_assoc($result);
+                    foreach ($result as $row) {
                         $out .= '{"team": "' . $row["team"] . '", "role": ' . $row["role"] . '}';
                         $i++;
-                        if ($i < $count) {
+                        if ($i < count($result)) {
                             $out .= ', ';
                         }
                     }
@@ -149,7 +132,6 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                     ]
                 } */
                 print($out);
-                mysqli_free_result($result);
             } else {
                 print('{"auth": false}');
             }
@@ -161,51 +143,47 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                 $user = $_POST["user"];
                 $team = $_POST["team"];
                 // requires `role` = 1 (i.e. a moderator)
-                if (mysqli_num_rows(mysqli_query($conn, 'SELECT `id` FROM `teamkeys__teams` WHERE `user` = "' . mysqli_real_escape_string($conn, $user) .
-                                                        '" AND `team` = "' . mysqli_real_escape_string($conn, $team) . '" AND `role` = 1;')) === 1) {
+                if ($db->has("teams", array("AND" => array("user" => $user, "team" => $team, "role" => 1)))) {
                     // submitted new list of members
                     if (isset($_POST["members"]) || isset($_POST["mods"])) {
                         // remove existing members, except self (cannot be changed)
-                        mysqli_query($conn, 'DELETE FROM `teamkeys__teams` WHERE `team` = "' . mysqli_real_escape_string($conn, $team) .
-                                            '" AND `user` <> "' . mysqli_real_escape_string($conn, $user) . '";');
+                        $db->delete("teams", array("AND" => array("team" => $team, "user[!]" => $user)));
                         // if a list of members
                         if ($_POST["members"]) {
                             // add all members (`role` = 0)
+                            $data = array();
                             foreach ($_POST["members"] as $i => $member) {
-                                mysqli_query($conn, 'INSERT INTO `teamkeys__teams` (`user`, `team`, `role`) VALUES ("' . mysqli_real_escape_string($conn, $member) .
-                                                    '", "' . mysqli_real_escape_string($conn, $team) . '", 0);');
+                                array_push($data, array("user" => $member, "team" => $team, "role" => 0));
                             }
+                            $db->insert("teams", $data);
                         }
                         // if a list of mods
                         if ($_POST["mods"]) {
                             // add all mods (`role` = 1)
-                            foreach ($_POST["mods"] as $i => $mod) {
-                                mysqli_query($conn, 'INSERT INTO `teamkeys__teams` (`user`, `team`, `role`) VALUES ("' . mysqli_real_escape_string($conn, $mod) .
-                                                    '", "' . mysqli_real_escape_string($conn, $team) . '", 1);');
+                            $data = array();
+                            foreach ($_POST["members"] as $i => $member) {
+                                array_push($data, array("user" => $member, "team" => $team, "role" => 1));
                             }
+                            $db->insert("teams", $data);
                         }
                     }
                     // fetch all members
-                    $result = mysqli_query($conn, 'SELECT * FROM `teamkeys__teams` WHERE `team` = "' . mysqli_real_escape_string($conn, $team) . '";');
-                    $count = mysqli_num_rows($result);
+                    $result = $db->select("teams", "*", array("team" => $team));
                     $members = array();
                     $mods = array();
-                    $i = 0;
                     // loop through members, assign to role list
-                    while ($i < $count) {
-                        $row = mysqli_fetch_assoc($result);
+                    foreach ($result as $row) {
                         switch ($row["role"]) {
                             case 0:
-                                $members[] = $row["user"];
+                                array_push($members, $row["user"]);
                                 break;
                             case 1:
-                                $mods[] = $row["user"];
+                                array_push($mods, $row["user"]);
                                 break;
                         }
-                        $i++;
                     }
-                    $out = '{"auth": true, "count": ' . $count;
-                    if ($count) {
+                    $out = '{"auth": true, "count": ' . count($result);
+                    if (count($result)) {
                         $out .= ', "members": [';
                         foreach ($members as $i => $user) {
                             $out .= '"' . $user . '"';
@@ -230,7 +208,6 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
                         mods: [user, ...]
                     } */
                     print($out);
-                    mysqli_free_result($result);
                 } else {
                     print('{"auth": false}');
                 }
@@ -243,5 +220,3 @@ if ($_SERVER["HTTP_REFERER"] === "https://www.ingress.com/intel") {
 } else {
     header("Location: https://www.ingress.com/intel");
 }
-mysqli_close($conn);
-
