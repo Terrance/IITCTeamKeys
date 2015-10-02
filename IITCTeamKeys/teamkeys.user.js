@@ -36,7 +36,7 @@ function wrapper() {
     // empty cache to hold portal and user names
     self.cache = {};
     // server script to sync with
-    self.server = "http://terrance.uk.to/labs/teamkeys.php";
+    self.server = "https://terrance.uk.to/labs/teamkeys.php";
     // fetch a portal name from a cached list if available
     self.getPortalName = function getPortalName(portal) {
         // try plugin cache
@@ -52,7 +52,7 @@ function wrapper() {
         } else {
             return "{" + portal + "}";
         }
-    }
+    };
     // custom dialog wrapper with more flexibility
     self.dialog = function dialog(options) {
         // create missing fields
@@ -76,8 +76,8 @@ function wrapper() {
             // reposition the dialog to the centre of the screen
             centre: function centre(force) {
                 if (!this.moved || force) {
-                	$(this.dialog).css("top", ($(window).height() - $(this.dialog).height()) / 2);
-                	$(this.dialog).css("left", ($(window).width() - $(this.dialog).width()) / 2);
+                    $(this.dialog).css("top", ($(window).height() - $(this.dialog).height()) / 2);
+                    $(this.dialog).css("left", ($(window).width() - $(this.dialog).width()) / 2);
                 }
                 return this;
             },
@@ -128,7 +128,7 @@ function wrapper() {
                 if (typeof show === "undefined") {
                     $(this.dialog).css("display", $(this.dialog).css("display") === "none" ? "block" : "none");
                 } else {
-                	$(this.dialog).css("display", show ? "block" : "none");
+                    $(this.dialog).css("display", show ? "block" : "none");
                 }
                 return this;
             },
@@ -262,15 +262,12 @@ function wrapper() {
     self.syncCache = function syncCache() {
         console.log("[Team Keys] Refreshing cache...");
         var cache = [];
-        // cache users
-        for (var x in window.localStorage) {
-            if (x.match(/^[0-9a-f]{32}\.c$/) && !self.cache[x]) {
-                self.cache[x] = window.localStorage[x];
+        // cache portals
+        for (var x in window.portals) {
+            if (x.match(/^[0-9a-f]{32}\.[0-9a-f]+$/) && !self.cache[x] && self.getPortalName(x)) {
+                // convert cache entry for sending (POSTing as an object throws header errors)
+                cache.push(x + "|" + self.cache[x]);
             }
-        }
-        // convert cache for sending (POSTing as an object throws header errors)
-        for (var x in self.cache) {
-            cache.push(x + "|" + self.cache[x]);
         }
         /* {
             guid: string,
@@ -290,9 +287,6 @@ function wrapper() {
                 if (data.count) {
                     self.cache = data.cache;
                     window.localStorage["plugin-teamKeys-cache"] = JSON.stringify(data.cache);
-                    setTimeout(function() {
-                        self.syncCache();
-                    }, 60000);
                 }
             },
             error: function(obj, status, err) {
@@ -814,9 +808,10 @@ function wrapper() {
     self.init = function init() {
         // resync when the map moves, or when key numbers change
         $.each(["mapDataRefreshEnd", "pluginKeysUpdateKey", "pluginKeysRefreshAll"], function(index, item) {
-            window.addHook(item, function() {
-                self.syncKeys();
-            });
+            window.addHook(item, self.syncKeys);
+            if (item === "mapDataRefreshEnd") {
+                window.addHook(item, self.syncCache);
+            }
         });
         // show current cached status, but still refresh
         window.addHook("portalDetailsUpdated", function() {
@@ -841,7 +836,7 @@ function wrapper() {
         $("#toolbox").append(block);
         // delete self to ensure init can't be run again
         delete self.init;
-    }
+    };
     // IITC plugin setup
     if (window.iitcLoaded && typeof self.setup === "function") {
         self.setup();
